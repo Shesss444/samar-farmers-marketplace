@@ -1,0 +1,7 @@
+{
+  "name": "Samar Farmers Online Marketplace",
+  "description": "A modern marketplace connecting Samar farmers with buyers, featuring a mapping system and scheduled Saturday deliveries.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
