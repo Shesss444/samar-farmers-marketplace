@@ -167,12 +167,12 @@ export function FarmerDashboard({ user, products, orders, reviews, onAddProduct,
                 value={orders.filter(o => o.status === 'pending').length} 
                 color="bg-blue-50"
               />
-              <StatCard 
+              {/* <StatCard 
                 icon={<Star className="w-6 h-6 text-yellow-600" />} 
                 label="Rating" 
                 value={reviews.length > 0 ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) : '0.0'} 
                 color="bg-yellow-50"
-              />
+              /> */}
               <StatCard 
                 icon={<Calendar className="w-6 h-6 text-orange-600" />} 
                 label="Next Delivery" 

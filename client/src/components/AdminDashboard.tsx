@@ -19,9 +19,8 @@ export function AdminDashboard({ user, users, products, orders, onUpdateUser, ac
 
   const stats = [
     { label: 'Total Users', value: users.length, icon: <Users className="w-6 h-6" />, color: 'bg-blue-50 text-blue-600' },
-    { label: 'Active Products', value: products.length, icon: <Package className="w-6 h-6" />, color: 'bg-emerald-50 text-emerald-600' },
-    { label: 'Total Orders', value: orders.length, icon: <ShoppingBag className="w-6 h-6" />, color: 'bg-orange-50 text-orange-600' },
-    { label: 'Total Revenue', value: `₱${orders.reduce((acc, o) => acc + o.totalPrice, 0)}`, icon: <TrendingUp className="w-6 h-6" />, color: 'bg-purple-50 text-purple-600' },
+    // { label: 'Active Products', value: products.length, icon: <Package className="w-6 h-6" />, color: 'bg-emerald-50 text-emerald-600' },
+    // { label: 'Total Orders', value: orders.length, icon: <ShoppingBag className="w-6 h-6" />, color: 'bg-orange-50 text-orange-600' },
   ];
 
   const pendingFarmers = users.filter(u => u.role === 'farmer' && u.isApproved === undefined);

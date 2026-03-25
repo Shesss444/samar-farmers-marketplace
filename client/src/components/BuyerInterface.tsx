@@ -573,14 +573,14 @@ export function BuyerInterface({ user, products, orders, reviews, onPlaceOrder, 
 
             {/* Actions */}
             <div className="flex items-center gap-3 md:gap-6">
-              <button 
+              {/* <button 
                 onClick={() => setShowGuide(true)}
                 className="flex flex-col items-center gap-1 hover:text-emerald-100 transition-colors text-emerald-100/70"
                 title="How to Buy?"
               >
                 <HelpCircle className="w-5 h-5 md:w-6 md:h-6" />
                 <span className="text-[10px] font-bold uppercase tracking-wider hidden md:block">Guide</span>
-              </button>
+              </button> */}
 
               <button 
                 onClick={() => setView('orders')}
@@ -1477,7 +1477,7 @@ export function BuyerInterface({ user, products, orders, reviews, onPlaceOrder, 
                     <Calendar className="w-4 h-4" />
                     Delivery every Saturday
                   </div>
-                  <p className="text-[10px] text-stone-400 italic">Reviews become available once your order is collected or delivered.</p>
+                  {/* <p className="text-[10px] text-stone-400 italic">Reviews become available once your order is collected or delivered.</p> */}
                 </div>
               </div>
 
@@ -1526,7 +1526,7 @@ export function BuyerInterface({ user, products, orders, reviews, onPlaceOrder, 
                       }`}>
                         {order.status}
                       </div>
-                      {(order.status === 'delivered' || order.status === 'collected') && !reviews.find(r => r.orderId === order.id) && (
+                      {/* {(order.status === 'delivered' || order.status === 'collected') && !reviews.find(r => r.orderId === order.id) && (
                         <button 
                           onClick={() => setReviewingOrder(order)}
                           className="px-6 py-2 bg-emerald-600 text-white text-xs font-bold uppercase tracking-widest rounded-sm hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20"
@@ -1539,7 +1539,7 @@ export function BuyerInterface({ user, products, orders, reviews, onPlaceOrder, 
                           <Star className="w-4 h-4 fill-current" />
                           <span className="text-xs font-bold">Reviewed</span>
                         </div>
-                      )}
+                      )} */}
                     </div>
                   ))
                 )}

@@ -63,12 +63,12 @@ export function Layout({ user, onSignOut, children, activeView, onViewChange, pe
                   active={activeView === 'location'} 
                   onClick={() => onViewChange?.('location')}
                 />
-                <NavItem 
+                {/* <NavItem 
                   icon={<Star className="w-5 h-5" />} 
                   label="Reviews" 
                   active={activeView === 'reviews'} 
                   onClick={() => onViewChange?.('reviews')}
-                />
+                /> */}
               </>
             )}
             {/* <NavItem 
