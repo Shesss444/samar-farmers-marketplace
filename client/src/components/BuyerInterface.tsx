@@ -1227,7 +1227,7 @@ export function BuyerInterface({ user, products, orders, reviews, onPlaceOrder, 
                         <div className="w-8 h-8 rounded-lg bg-stone-100 flex items-center justify-center text-stone-500 group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-colors">
                           <Bell className="w-4 h-4" />
                         </div>
-                        <span className="text-sm font-medium text-stone-700">Notifications</span>
+                        {/* <span className="text-sm font-medium text-stone-700">Notifications</span> */}
                       </div>
                       <ChevronRight className="w-4 h-4 text-stone-300" />
                     </button>
