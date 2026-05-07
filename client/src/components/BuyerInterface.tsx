@@ -1135,7 +1135,7 @@ export function BuyerInterface({
                         </div>
                       )}
 
-                    <button
+                    {/* <button
                       onClick={() => {
                         const lat =
                           selectedProduct.location?.lat ||
@@ -1152,7 +1152,7 @@ export function BuyerInterface({
                     >
                       <Navigation className="w-3 h-3" />
                       Get Directions
-                    </button>
+                    </button> */}
                   </div>
                 </div>
               </div>
