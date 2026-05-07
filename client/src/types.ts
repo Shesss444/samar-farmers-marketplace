@@ -1,4 +1,6 @@
-export type UserRole = 'farmer' | 'buyer' | 'admin';
+export type UserRole = 'admin' | 'farmer' | 'buyer';
+
+export interface Location { lat: number; lng: number }
 
 export interface UserProfile {
   uid: string;
@@ -6,19 +8,18 @@ export interface UserProfile {
   displayName: string;
   role: UserRole;
   municipality?: string;
-  street?: string;
-  houseNo?: string;
-  barangay?: string;
-  photoURL?: string;
+  isApproved?: boolean | null;
+  createdAt: string;
   bio?: string;
   farmingPractices?: string[];
-  createdAt: string;
-  location?: {
-    lat: number;
-    lng: number;
-  };
+  phone?: string;
+  primaryProducts?: string[];
+  location?: Location;
+  houseNo?: string;
+  street?: string;
+  barangay?: string;
+  photoURL?: string;
   favorites?: string[];
-  isApproved?: boolean;
 }
 
 export interface Product {
@@ -28,18 +29,16 @@ export interface Product {
   name: string;
   price: number;
   quantity: number;
-  category: 'vegetables' | 'fruits' | 'rice' | 'root crops' | 'others';
+  category: string;
   imageUrl: string;
   imagePosition?: string;
   description: string;
+  kilograms?: number;
   farmerBio?: string;
   farmingPractices?: string[];
-  municipality: string;
+  municipality?: string;
+  location?: Location;
   createdAt: string;
-  location?: {
-    lat: number;
-    lng: number;
-  };
 }
 
 export interface Order {
@@ -47,13 +46,14 @@ export interface Order {
   buyerId: string;
   buyerName: string;
   sellerId: string;
+  sellerName?: string;
   productId: string;
   productName: string;
   quantity: number;
   totalPrice: number;
   status: 'pending' | 'collected' | 'delivered';
-  deliveryDate: string;
-  createdAt: string;
+  deliveryDate?: string;
+  createdAt?: string;
 }
 
 export interface Review {
@@ -68,14 +68,16 @@ export interface Review {
   createdAt: string;
 }
 
-export const MUNICIPALITIES = [
-  'Catbalogan', 'Calbayog', 'Borongan', 'Guiuan', 'Catarman', 
-  'Basey', 'Calbiga', 'Gandara', 'Laoang', 'Palapag',
-  'Almagro', 'Daram', 'Hinabangan', 'Jiabong', 'Marabut', 
-  'Matuguinao', 'Motiong', 'Pagsanghan', 'Paranas', 'Pinabacdao', 
-  'San Jorge', 'San Jose de Buan', 'San Sebastian', 'Santa Margarita', 
-  'Santa Rita', 'Santo Niño', 'Tagapul-an', 'Talalora', 'Tarangnan', 
-  'Villareal', 'Zumarraga'
-].sort();
+export const CATEGORIES = [
+  'vegetables',
+  'fruits',
+  'rice',
+  'root crops',
+  'others'
+] as const;
 
-export const CATEGORIES = ['vegetables', 'fruits', 'rice', 'root crops', 'others'] as const;
+export type Category = typeof CATEGORIES[number];
+
+export const MUNICIPALITIES = [
+  'Catbalogan','Calbayog','Borongan','Guiuan','Catarman','Basey','Calbiga','Gandara','Laoang','Palapag','Almagro','Daram','Hinabangan','Jiabong','Marabut','Matuguinao','Motiong','Pagsanghan','Paranas','Pinabacdao','San Jorge','San Jose de Buan','San Sebastian','Santa Margarita','Santa Rita','Santo Niño','Tagapul-an','Talalora','Tarangnan','Villareal','Zumarraga'
+];

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { UserProfile, UserRole, MUNICIPALITIES } from '../types';
-import { Leaf, Loader2, User, Lock, Mail, MapPin } from 'lucide-react';
-import { motion } from 'framer-motion';
+import React, { useState } from "react";
+import { UserProfile, UserRole, MUNICIPALITIES } from "../types";
+import { Leaf, Loader2, User, Lock, Mail, MapPin } from "lucide-react";
+import { motion } from "framer-motion";
 
 interface AuthProps {
   onAuthSuccess: (profile: UserProfile) => void;
@@ -10,70 +10,101 @@ interface AuthProps {
 export function Auth({ onAuthSuccess }: AuthProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [role, setRole] = useState<UserRole>('buyer');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [role, setRole] = useState<UserRole>("buyer");
   const [municipality, setMunicipality] = useState(MUNICIPALITIES[0]);
+  const [phone, setPhone] = useState("");
+  const [primaryProducts, setPrimaryProducts] = useState("");
+
+  const API = import.meta.env.VITE_API_BASE || "http://localhost:4000";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
+    setError("");
+    setSuccess("");
 
-    // Simulate API delay
-    setTimeout(() => {
+    try {
       if (isLogin) {
-        if (email === 'admin' && password === '123') {
-          onAuthSuccess({
-            uid: 'admin-id',
-            email: 'admin@samar.gov',
-            displayName: 'System Admin',
-            role: 'admin',
-            createdAt: new Date().toISOString()
-          });
-        } else if (email === 'farmer' && password === '123') {
-          onAuthSuccess({
-            uid: 'farmer-id',
-            email: 'farmer@samar.gov',
-            displayName: 'Juan Dela Cruz',
-            role: 'farmer',
-            municipality: 'Catbalogan',
-            isApproved: true,
-            createdAt: new Date().toISOString()
-          });
-        } else if (email === 'buyer' && password === '123') {
-          onAuthSuccess({
-            uid: 'buyer1',
-            email: 'buyer@samar.gov',
-            displayName: 'Buyer Maria',
-            role: 'buyer',
-            createdAt: new Date().toISOString()
-          });
-        } else {
-          setError('Invalid credentials. Try admin/123, farmer/123, or buyer/123');
-          setLoading(false);
-        }
-      } else {
-        // Registration mock
-        onAuthSuccess({
-          uid: Math.random().toString(36).substr(2, 9),
-          email,
-          displayName,
-          role,
-          municipality: role === 'farmer' ? municipality : undefined,
-          isApproved: role === 'farmer' ? false : true,
-          createdAt: new Date().toISOString(),
+        const res = await fetch(`${API}/signin`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
         });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Sign in failed");
+        // data.profile is the stored user profile in Firestore
+        // persist JWT for later requests
+        if (data.idToken) localStorage.setItem("idToken", data.idToken);
+        onAuthSuccess({ ...(data.profile || {}), uid: data.uid });
+      } else {
+        const payload: any = { email, password, displayName, role };
+        if (role === "farmer") {
+          payload.municipality = municipality;
+          payload.phone = phone;
+          payload.primaryProducts = primaryProducts
+            .split(",")
+            .map((s: string) => s.trim())
+            .filter((s: string) => s);
+        }
+
+        const res = await fetch(`${API}/signup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Signup failed");
+
+        // show a success message for user feedback
+        if (role === "farmer") {
+          setSuccess("Account created successfully — pending admin approval.");
+        } else {
+          setSuccess("Account created successfully.");
+        }
+
+        // auto sign-in to obtain JWT and fresh profile
+        try {
+          const sres = await fetch(`${API}/signin`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          });
+          const sdata = await sres.json();
+          if (sres.ok) {
+            if (sdata.idToken) localStorage.setItem("idToken", sdata.idToken);
+            const profile = {
+              ...(sdata.profile || data.profile || {}),
+              uid: sdata.uid || data.uid,
+            };
+            localStorage.setItem("profile", JSON.stringify(profile));
+            onAuthSuccess(profile);
+          } else {
+            const profile = { ...(data.profile || {}), uid: data.uid };
+            localStorage.setItem("profile", JSON.stringify(profile));
+            onAuthSuccess(profile);
+          }
+        } catch (e) {
+          const profile = { ...(data.profile || {}), uid: data.uid };
+          localStorage.setItem("profile", JSON.stringify(profile));
+          onAuthSuccess(profile);
+        }
       }
-    }, 1000);
+    } catch (err: any) {
+      setError(err.message || "An error occurred");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="max-w-4xl w-full bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row"
@@ -83,20 +114,29 @@ export function Auth({ onAuthSuccess }: AuthProps) {
           <div className="relative z-10">
             <div className="flex items-center gap-3 mb-8">
               <Leaf className="w-10 h-10 text-emerald-400" />
-              <h1 className="text-3xl font-bold tracking-tight">Samar Farmers</h1>
+              <h1 className="text-3xl font-bold tracking-tight">
+                Samar Farmers
+              </h1>
             </div>
             <h2 className="text-4xl font-light leading-tight mb-6">
-              Empowering <span className="text-emerald-400 font-bold italic">Local Agriculture</span> in Samar.
+              Empowering{" "}
+              <span className="text-emerald-400 font-bold italic">
+                Local Agriculture
+              </span>{" "}
+              in Samar.
             </h2>
             <p className="text-emerald-200 text-lg">
-              Connecting farmers directly to buyers for a sustainable and thriving community.
+              Connecting farmers directly to buyers for a sustainable and
+              thriving community.
             </p>
           </div>
-          
+
           <div className="relative z-10 mt-12">
             <div className="flex items-center gap-4 text-emerald-400">
               <div className="w-12 h-1px bg-emerald-400/30"></div>
-              <span className="text-sm uppercase tracking-widest font-semibold">Online Marketplace</span>
+              <span className="text-sm uppercase tracking-widest font-semibold">
+                Online Marketplace
+              </span>
             </div>
           </div>
 
@@ -109,17 +149,21 @@ export function Auth({ onAuthSuccess }: AuthProps) {
         <div className="md:w-1/2 p-12">
           <div className="mb-8">
             <h3 className="text-2xl font-bold text-stone-900 mb-2">
-              {isLogin ? 'Welcome Back' : 'Create Account'}
+              {isLogin ? "Welcome Back" : "Create Account"}
             </h3>
             <p className="text-stone-500">
-              {isLogin ? 'Sign in (admin/123, farmer/123, buyer/123)' : 'Join our community of farmers and buyers'}
+              {isLogin
+                ? "Sign in to your account"
+                : "Join our community of farmers and buyers"}
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
               <div className="space-y-1">
-                <label className="text-sm font-semibold text-stone-700">Full Name</label>
+                <label className="text-sm font-semibold text-stone-700">
+                  Full Name
+                </label>
                 <div className="relative">
                   <User className="absolute left-3 top-3 w-5 h-5 text-stone-400" />
                   <input
@@ -135,7 +179,9 @@ export function Auth({ onAuthSuccess }: AuthProps) {
             )}
 
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-stone-700">Username or Email</label>
+              <label className="text-sm font-semibold text-stone-700">
+                Email
+              </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-3 w-5 h-5 text-stone-400" />
                 <input
@@ -144,13 +190,15 @@ export function Auth({ onAuthSuccess }: AuthProps) {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                  placeholder="admin"
+                  placeholder="you@gmail.com"
                 />
               </div>
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-stone-700">Password</label>
+              <label className="text-sm font-semibold text-stone-700">
+                Password
+              </label>
               <div className="relative">
                 <Lock className="absolute left-3 top-3 w-5 h-5 text-stone-400" />
                 <input
@@ -159,7 +207,7 @@ export function Auth({ onAuthSuccess }: AuthProps) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                  placeholder="123"
+                  placeholder="••••••••"
                 />
               </div>
             </div>
@@ -167,7 +215,9 @@ export function Auth({ onAuthSuccess }: AuthProps) {
             {!isLogin && (
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-sm font-semibold text-stone-700">I am a...</label>
+                  <label className="text-sm font-semibold text-stone-700">
+                    I am a...
+                  </label>
                   <select
                     value={role}
                     onChange={(e) => setRole(e.target.value as UserRole)}
@@ -177,9 +227,11 @@ export function Auth({ onAuthSuccess }: AuthProps) {
                     <option value="farmer">Farmer</option>
                   </select>
                 </div>
-                {role === 'farmer' && (
+                {role === "farmer" && (
                   <div className="space-y-1">
-                    <label className="text-sm font-semibold text-stone-700">Municipality</label>
+                    <label className="text-sm font-semibold text-stone-700">
+                      Municipality
+                    </label>
                     <div className="relative">
                       <MapPin className="absolute left-3 top-3 w-4 h-4 text-stone-400" />
                       <select
@@ -187,7 +239,11 @@ export function Auth({ onAuthSuccess }: AuthProps) {
                         onChange={(e) => setMunicipality(e.target.value)}
                         className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                       >
-                        {MUNICIPALITIES.map(m => <option key={m} value={m}>{m}</option>)}
+                        {MUNICIPALITIES.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -195,23 +251,81 @@ export function Auth({ onAuthSuccess }: AuthProps) {
               </div>
             )}
 
+            {!isLogin && role === "farmer" && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                className="space-y-4 pt-4 border-t border-stone-100"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-1 h-4 bg-emerald-500 rounded-full"></div>
+                  <h4 className="text-xs font-bold text-stone-400 uppercase tracking-wider">
+                    Farmer Registration Details
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-sm font-semibold text-stone-700">
+                      Phone Number
+                    </label>
+                    <input
+                      required
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                      placeholder="0912 345 6789"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-sm font-semibold text-stone-700">
+                    Primary Products (Comma separated)
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    value={primaryProducts}
+                    onChange={(e) => setPrimaryProducts(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    placeholder="Rice, Corn, Vegetables"
+                  />
+                </div>
+              </motion.div>
+            )}
+
             {error && <p className="text-red-500 text-sm">{error}</p>}
+            {success && <p className="text-green-600 text-sm">{success}</p>}
 
             <button
               disabled={loading}
               type="submit"
               className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2"
             >
-              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (isLogin ? 'Sign In' : 'Create Account')}
+              {loading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : isLogin ? (
+                "Sign In"
+              ) : (
+                "Create Account"
+              )}
             </button>
           </form>
 
           <div className="mt-8 text-center">
             <button
-              onClick={() => setIsLogin(!isLogin)}
+              onClick={() => {
+                setIsLogin(!isLogin);
+                setError("");
+                setSuccess("");
+              }}
               className="text-stone-500 hover:text-emerald-600 font-medium transition-colors"
             >
-              {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+              {isLogin
+                ? "Don't have an account? Sign up"
+                : "Already have an account? Sign in"}
             </button>
           </div>
         </div>

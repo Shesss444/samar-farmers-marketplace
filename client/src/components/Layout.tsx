@@ -1,6 +1,8 @@
 import React from 'react';
 import { UserProfile } from '../types';
-import { LogOut, User, ShoppingCart, LayoutDashboard, Map as MapIcon, Leaf, ShoppingBag, Star, ShieldCheck, Users } from 'lucide-react';
+import { LogOut, User, ShoppingCart, LayoutDashboard, Map as MapIcon, Leaf, ShoppingBag, Star, ShieldCheck, Users, CheckCircle2 } from 'lucide-react';
+import { Toaster, toast } from 'sonner';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface LayoutProps {
   user: UserProfile;
@@ -15,8 +17,18 @@ export function Layout({ user, onSignOut, children, activeView, onViewChange, pe
   const isBuyer = user.role === 'buyer';
   const isFarmer = user.role === 'farmer';
 
+  const handleSignOut = () => {
+    toast.info('Signing out...', {
+      description: 'Please wait while we securely log you out.',
+      duration: 1500,
+    });
+    setTimeout(onSignOut, 1000);
+  };
+
   return (
     <div className="min-h-screen bg-stone-50 flex">
+      <Toaster position="top-right" richColors closeButton />
+      
       {/* Sidebar */}
       {!isBuyer && (
         <aside className="w-64 bg-emerald-900 text-white flex flex-col fixed h-full z-50">
@@ -53,9 +65,15 @@ export function Layout({ user, onSignOut, children, activeView, onViewChange, pe
               <>
                 <NavItem 
                   icon={<ShoppingBag className="w-5 h-5" />} 
-                  label="Recent Orders" 
+                  label="Active Orders" 
                   active={activeView === 'orders'} 
                   onClick={() => onViewChange?.('orders')}
+                />
+                <NavItem 
+                  icon={<CheckCircle2 className="w-5 h-5" />} 
+                  label="Completed Orders" 
+                  active={activeView === 'completed_orders'} 
+                  onClick={() => onViewChange?.('completed_orders')}
                 />
                 <NavItem 
                   icon={<MapIcon className="w-5 h-5" />} 
@@ -63,6 +81,8 @@ export function Layout({ user, onSignOut, children, activeView, onViewChange, pe
                   active={activeView === 'location'} 
                   onClick={() => onViewChange?.('location')}
                 />
+
+            {/* Layout Reviews sidebar farmer--------------------------------------- */}
                 {/* <NavItem 
                   icon={<Star className="w-5 h-5" />} 
                   label="Reviews" 
@@ -71,6 +91,8 @@ export function Layout({ user, onSignOut, children, activeView, onViewChange, pe
                 /> */}
               </>
             )}
+
+            {/* Layout Profile sidebar farmer--------------------------------------- */}
             {/* <NavItem 
               icon={<User className="w-5 h-5" />} 
               label="Profile" 
@@ -90,7 +112,7 @@ export function Layout({ user, onSignOut, children, activeView, onViewChange, pe
               </div>
             </div>
             <button
-              onClick={onSignOut}
+              onClick={handleSignOut}
               className="w-full flex items-center gap-2 px-4 py-2 text-sm text-emerald-300 hover:bg-emerald-800 rounded-lg transition-colors"
             >
               <LogOut className="w-4 h-4" />
