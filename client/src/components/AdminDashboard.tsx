@@ -36,8 +36,7 @@ export function AdminDashboard({
   const [viewingFarmer, setViewingFarmer] = React.useState<UserProfile | null>(
     null,
   );
-  const API =
-    (import.meta.env.VITE_API_BASE as string) || "http://localhost:4000";
+  const API = ((import.meta.env.VITE_API_BASE as string) || "http://localhost:4000").replace(/\/+$/, '');
 
   const approveUser = async (uid: string, displayName?: string) => {
     const token = localStorage.getItem("idToken");

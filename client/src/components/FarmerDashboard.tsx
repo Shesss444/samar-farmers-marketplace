@@ -784,7 +784,7 @@ function LocationSection({ user, onUpdateUser }: { user: UserProfile; onUpdateUs
   const handleLocate = async () => {
     setLocating(true);
     try {
-      const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:4000';
+      const API = ((import.meta.env.VITE_API_BASE as string) || 'http://localhost:4000').replace(/\/+$/, '');
       const query = `${address.houseNo || ''} ${address.street || ''} ${address.barangay || ''} ${municipality} Samar Philippines`.trim();
       const resp = await fetch(`${API}/geocode`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ address: query }) });
       if (resp.ok) {
@@ -814,7 +814,7 @@ function LocationSection({ user, onUpdateUser }: { user: UserProfile; onUpdateUs
   // Reverse geocode helper to fetch address details for a lat/lng
   const reverseGeocode = async (lat: number, lng: number) => {
     try {
-      const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:4000';
+      const API = ((import.meta.env.VITE_API_BASE as string) || 'http://localhost:4000').replace(/\/+$/, '');
       const res = await fetch(`${API}/reverse-geocode`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -836,7 +836,7 @@ function LocationSection({ user, onUpdateUser }: { user: UserProfile; onUpdateUs
   const handleSave = async () => {
     setSaving(true);
     try {
-      const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:4000';
+      const API = ((import.meta.env.VITE_API_BASE as string) || 'http://localhost:4000').replace(/\/+$/, '');
       const token = localStorage.getItem('idToken');
       const res = await fetch(`${API}/users/${user.uid}/location`, {
         method: 'POST',
@@ -883,7 +883,7 @@ function LocationSection({ user, onUpdateUser }: { user: UserProfile; onUpdateUs
     }
     autoSaveTimer.current = window.setTimeout(async () => {
       try {
-        const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:4000';
+        const API = ((import.meta.env.VITE_API_BASE as string) || 'http://localhost:4000').replace(/\/+$/, '');
         const token = localStorage.getItem('idToken');
         const res = await fetch(`${API}/users/${user.uid}/location`, {
           method: 'POST',

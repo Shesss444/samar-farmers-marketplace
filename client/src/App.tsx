@@ -187,8 +187,7 @@ export default function App() {
   };
 
   const addProduct = (product: Omit<Product, "id" | "createdAt">) => {
-    const API =
-      (import.meta.env.VITE_API_BASE as string) || "http://localhost:4000";
+    const API = ((import.meta.env.VITE_API_BASE as string) || "http://localhost:4000").replace(/\/+$/, '');
     const token = localStorage.getItem("idToken");
     fetch(`${API}/products`, {
       method: "POST",
@@ -212,8 +211,7 @@ export default function App() {
 
   // On mount: restore session, load products, orders and users (if admin)
   useEffect(() => {
-    const API =
-      (import.meta.env.VITE_API_BASE as string) || "http://localhost:4000";
+    const API = ((import.meta.env.VITE_API_BASE as string) || "http://localhost:4000").replace(/\/+$/, '');
     try {
       const stored = localStorage.getItem("profile");
       const token = localStorage.getItem("idToken");
@@ -314,8 +312,7 @@ export default function App() {
   }, []);
 
   const deleteProduct = (id: string) => {
-    const API =
-      (import.meta.env.VITE_API_BASE as string) || "http://localhost:4000";
+    const API = ((import.meta.env.VITE_API_BASE as string) || "http://localhost:4000").replace(/\/+$/, '');
     const token = localStorage.getItem("idToken");
     fetch(`${API}/products/${id}`, {
       method: "DELETE",
@@ -332,8 +329,7 @@ export default function App() {
   };
 
   const updateProduct = (id: string, updates: Partial<Product>) => {
-    const API =
-      (import.meta.env.VITE_API_BASE as string) || "http://localhost:4000";
+    const API = ((import.meta.env.VITE_API_BASE as string) || "http://localhost:4000").replace(/\/+$/, '');
     const token = localStorage.getItem("idToken");
     fetch(`${API}/products/${id}`, {
       method: "PUT",
@@ -358,8 +354,7 @@ export default function App() {
   };
 
   const addOrder = (newOrders: Omit<Order, "id" | "createdAt">[]) => {
-    const API =
-      (import.meta.env.VITE_API_BASE as string) || "http://localhost:4000";
+    const API = ((import.meta.env.VITE_API_BASE as string) || "http://localhost:4000").replace(/\/+$/, '');
     const token = localStorage.getItem("idToken");
     fetch(`${API}/orders`, {
       method: "POST",
@@ -395,8 +390,7 @@ export default function App() {
   };
 
   const updateOrderStatus = (orderId: string, status: Order["status"]) => {
-    const API =
-      (import.meta.env.VITE_API_BASE as string) || "http://localhost:4000";
+    const API = ((import.meta.env.VITE_API_BASE as string) || "http://localhost:4000").replace(/\/+$/, '');
     const token = localStorage.getItem("idToken");
     fetch(`${API}/orders/${orderId}/status`, {
       method: "PATCH",
@@ -425,8 +419,7 @@ export default function App() {
 
   const updateUser = (uid: string, updates: Partial<UserProfile>) => {
     // Persist change to backend (if available) and update local state
-    const API =
-      (import.meta.env.VITE_API_BASE as string) || "http://localhost:4000";
+    const API = ((import.meta.env.VITE_API_BASE as string) || "http://localhost:4000").replace(/\/+$/, '');
     const token = localStorage.getItem("idToken");
     const headers: Record<string, string> = {
       "Content-Type": "application/json",

@@ -21,7 +21,7 @@ export function Auth({ onAuthSuccess }: AuthProps) {
   const [phone, setPhone] = useState("");
   const [primaryProducts, setPrimaryProducts] = useState("");
 
-  const API = import.meta.env.VITE_API_BASE || "http://localhost:4000";
+  const API = (import.meta.env.VITE_API_BASE || "http://localhost:4000").replace(/\/+$/, '');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

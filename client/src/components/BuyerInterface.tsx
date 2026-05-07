@@ -244,7 +244,7 @@ export function BuyerInterface({
   const handleLocateOnMap = async () => {
     setIsLocating(true);
     try {
-      const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:4000';
+      const API = ((import.meta.env.VITE_API_BASE as string) || 'http://localhost:4000').replace(/\/+$/, '');
       const query = `${address.street} ${address.barangay} ${address.municipality} Samar Philippines`;
       const resp = await fetch(`${API}/geocode`, {
         method: 'POST',
@@ -268,7 +268,7 @@ export function BuyerInterface({
 
   const handleSaveLocation = () => {
     (async () => {
-      const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:4000';
+      const API = ((import.meta.env.VITE_API_BASE as string) || 'http://localhost:4000').replace(/\/+$/, '');
       const token = localStorage.getItem('idToken');
       try {
         const res = await fetch(`${API}/users/${user.uid}/location`, {
@@ -373,7 +373,7 @@ export function BuyerInterface({
     const fillAddressFromLocation = async () => {
       if (!tempLocation) return;
       try {
-        const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:4000';
+        const API = ((import.meta.env.VITE_API_BASE as string) || 'http://localhost:4000').replace(/\/+$/, '');
         const res = await fetch(`${API}/reverse-geocode`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lat: tempLocation.lat, lng: tempLocation.lng }) });
         if (!res.ok) return;
         const d = await res.json();
