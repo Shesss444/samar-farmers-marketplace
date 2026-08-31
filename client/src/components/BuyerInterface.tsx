@@ -1000,6 +1000,7 @@ export function BuyerInterface({
                     <div className="flex flex-wrap items-center gap-3 md:gap-4">
                       <span className="text-emerald-600 font-black text-2xl md:text-3xl lg:text-4xl">
                         ₱{selectedProduct.price}
+                        <span className="text-base md:text-xl font-bold text-stone-500"> /kg</span>
                       </span>
                       <span className="px-2 py-1 bg-stone-100 text-stone-500 text-[10px] md:text-xs font-bold rounded uppercase tracking-widest border border-stone-200">
                         {selectedProduct.category}
@@ -1562,6 +1563,7 @@ export function BuyerInterface({
                           <div className="flex min-w-0 items-center justify-between gap-2">
                             <span className="text-xs font-bold text-emerald-600 sm:text-lg">
                               ₱{product.price}
+                              <span className="text-[8px] font-medium text-stone-500 sm:text-[10px]"> /kg</span>
                             </span>
                             <span className="max-w-[48%] truncate text-[8px] text-stone-400 sm:text-[10px]">
                               {product.municipality}
