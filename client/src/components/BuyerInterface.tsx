@@ -4,6 +4,7 @@ import {
   Product,
   Order,
   Review,
+  Message,
   CATEGORIES,
   MUNICIPALITIES,
 } from "../types";
@@ -41,6 +42,7 @@ import {
   Menu,
   Clock,
   Truck,
+  MessageSquare,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -137,7 +139,7 @@ interface BuyerInterfaceProps {
   orders: Order[];
   reviews: Review[];
   onPlaceOrder: (orders: Omit<Order, "id" | "createdAt">[]) => void;
-  onAddReview: (review: Omit<Review, "id" | "createdAt">) => void;
+  onAddReview: (review: Omit<Review, "id" | "createdAt">) => Promise<void>;
   onSignOut: () => void;
   onUpdateUser: (uid: string, updates: Partial<UserProfile>) => void;
 }
@@ -184,6 +186,76 @@ export function BuyerInterface({
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [showFiltersSidebar, setShowFiltersSidebar] = useState(false);
   const [quantity, setQuantity] = useState(1);
+  const previousOrderStatuses = useRef<Record<string, Order["status"]>>({});
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [messageDraft, setMessageDraft] = useState("");
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+
+  useEffect(() => {
+    if (!selectedProduct) {
+      setMessages([]);
+      setShowChat(false);
+      return;
+    }
+    setShowChat(false);
+    const API = ((import.meta.env.VITE_API_BASE as string) || "http://localhost:4000").replace(/\/+$/, '');
+    const loadMessages = async () => {
+      const token = localStorage.getItem("idToken");
+      try {
+        const response = await fetch(`${API}/messages?productId=${encodeURIComponent(selectedProduct.id)}`, {
+          headers: { Authorization: `Bearer ${token || ''}` },
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (Array.isArray(data.messages)) setMessages(data.messages);
+      } catch (error) {
+        console.error("Fetch chat messages error", error);
+      }
+    };
+    loadMessages();
+    const interval = window.setInterval(loadMessages, 5000);
+    return () => window.clearInterval(interval);
+  }, [selectedProduct?.id]);
+
+  const sendMessage = async () => {
+    if (!selectedProduct || !messageDraft.trim() || isSendingMessage) return;
+    setIsSendingMessage(true);
+    const API = ((import.meta.env.VITE_API_BASE as string) || "http://localhost:4000").replace(/\/+$/, '');
+    const token = localStorage.getItem("idToken");
+    try {
+      const response = await fetch(`${API}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token || ''}` },
+        body: JSON.stringify({ productId: selectedProduct.id, message: messageDraft.trim() }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Unable to send message");
+      if (data.message) setMessages((previous) => [...previous, data.message]);
+      setMessageDraft("");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to send message");
+    } finally {
+      setIsSendingMessage(false);
+    }
+  };
+
+  useEffect(() => {
+    orders.forEach((order) => {
+      const previousStatus = previousOrderStatuses.current[order.id];
+      if (previousStatus && previousStatus !== order.status) {
+        const statusLabel = order.status === "preparing"
+          ? "Preparing"
+          : order.status === "ready_to_pick_up"
+            ? "Ready to pick up"
+            : "Completed";
+        toast.info("Order status updated", {
+          description: `${order.productName} is now ${statusLabel}.`,
+        });
+      }
+      previousOrderStatuses.current[order.id] = order.status;
+    });
+  }, [orders]);
 
   const toggleFavorite = (productId: string) => {
     const currentFavorites = user.favorites || [];
@@ -209,23 +281,26 @@ export function BuyerInterface({
     }
   }, []);
 
-  const handleSubmitReview = () => {
+  const handleSubmitReview = async () => {
     if (!reviewingOrder) return;
 
-    onAddReview({
-      orderId: reviewingOrder.id,
-      buyerId: user.uid,
-      buyerName: user.displayName,
-      sellerId: reviewingOrder.sellerId,
-      productId: reviewingOrder.productId,
-      rating,
-      comment,
-    });
-
-    toast.success("Feedback sent successfully!");
-    setReviewingOrder(null);
-    setRating(5);
-    setComment("");
+    try {
+      await onAddReview({
+        orderId: reviewingOrder.id,
+        buyerId: user.uid,
+        buyerName: user.displayName,
+        sellerId: reviewingOrder.sellerId,
+        productId: reviewingOrder.productId,
+        rating,
+        comment,
+      });
+      toast.success("Feedback sent successfully!");
+      setReviewingOrder(null);
+      setRating(5);
+      setComment("");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to submit review");
+    }
   };
 
   // Location state for profile
@@ -456,7 +531,7 @@ export function BuyerInterface({
       productName: item.product.name,
       quantity: item.quantity,
       totalPrice: item.product.price * item.quantity,
-      status: "pending" as const,
+      status: "preparing" as const,
       deliveryDate,
     }));
 
@@ -469,9 +544,9 @@ export function BuyerInterface({
 
   const cartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
   const totalSpent = orders.reduce((acc, o) => acc + o.totalPrice, 0);
-  const activeOrdersCount = orders.filter((o) => o.status === "pending").length;
+  const activeOrdersCount = orders.filter((o) => o.status !== "completed").length;
   const completedOrdersCount = orders.filter(
-    (o) => o.status === "delivered",
+    (o) => o.status === "completed",
   ).length;
 
   const guideSteps = [
@@ -515,9 +590,20 @@ export function BuyerInterface({
       height: 0,
     });
 
+    const getVisibleTarget = () => {
+      const targetIds = step.target === "search-bar"
+        ? ["search-bar-mobile", "search-bar"]
+        : step.target === "municipality-filter"
+          ? ["municipality-filter-mobile", "municipality-filter"]
+          : [step.target];
+      return targetIds
+        .map((id) => document.getElementById(id))
+        .find((element) => element && element.getClientRects().length > 0) || null;
+    };
+
     useEffect(() => {
       const updateCoords = () => {
-        const el = document.getElementById(step.target);
+        const el = getVisibleTarget();
         if (el) {
           const rect = el.getBoundingClientRect();
           setCoords({
@@ -533,7 +619,7 @@ export function BuyerInterface({
       updateCoords();
 
       // Scroll target into view
-      const el = document.getElementById(step.target);
+      const el = getVisibleTarget();
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
       }
@@ -556,6 +642,14 @@ export function BuyerInterface({
 
     const getTooltipPosition = () => {
       const margin = 16;
+      if (window.innerWidth < 640) {
+        return {
+          top: Math.min(Math.max(coords.top + coords.height + margin, 16), window.innerHeight - 230),
+          left: 12,
+          translateX: "0",
+          translateY: "0",
+        };
+      }
       switch (step.position) {
         case "bottom":
           return {
@@ -591,7 +685,7 @@ export function BuyerInterface({
     const pos = getTooltipPosition();
 
     return (
-      <div className="fixed inset-0 z-[200] pointer-events-none overflow-hidden">
+      <div className="fixed inset-0 z-[200] pointer-events-none overflow-visible">
         {/* Highlight Overlay */}
         <motion.div
           layout
@@ -616,7 +710,7 @@ export function BuyerInterface({
             y: pos.translateY,
           }}
           transition={{ type: "spring", damping: 25, stiffness: 200 }}
-          className="absolute bg-white p-6 rounded-2xl shadow-2xl w-80 pointer-events-auto border border-emerald-100"
+          className="absolute pointer-events-auto w-[calc(100vw-24px)] max-w-80 rounded-2xl border border-emerald-100 bg-white p-4 shadow-2xl sm:p-6"
         >
           <div className="flex items-center gap-2 mb-3">
             <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold">
@@ -643,7 +737,7 @@ export function BuyerInterface({
               {guideStep > 0 && (
                 <button
                   onClick={() => setGuideStep((prev) => prev - 1)}
-                  className="px-3 py-1.5 bg-stone-100 text-stone-600 text-[10px] font-bold rounded-lg hover:bg-stone-200 transition-colors uppercase tracking-widest"
+                  className="rounded-lg bg-stone-100 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-stone-600 transition-colors hover:bg-stone-200"
                 >
                   Back
                 </button>
@@ -657,7 +751,7 @@ export function BuyerInterface({
                     localStorage.setItem("hasSeenGuide", "true");
                   }
                 }}
-                className="px-4 py-1.5 bg-emerald-600 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20 uppercase tracking-widest"
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-white shadow-lg shadow-emerald-600/20 transition-colors hover:bg-emerald-700"
               >
                 {guideStep === guideSteps.length - 1 ? "Finish" : "Next"}
               </button>
@@ -683,32 +777,33 @@ export function BuyerInterface({
     <div className="min-h-screen bg-stone-50">
       {/* Shopee-style Header */}
       <header className="bg-emerald-600 text-white sticky top-0 z-50 shadow-md">
-        <div className="max-w-7xl mx-auto px-4 py-3 md:py-4">
-          <div className="flex items-center justify-between gap-4 md:gap-8">
+        <div className="mx-auto w-full max-w-[430px] px-2 py-3 sm:max-w-7xl sm:px-4 md:py-4">
+          <div className="flex min-w-0 items-center justify-between gap-1.5 sm:gap-4 md:gap-8">
             {/* Mobile Menu Button - Only for Marketplace Filters */}
             {view === "marketplace" && !selectedProduct && (
               <button
+                id="municipality-filter-mobile"
                 onClick={() => setShowFiltersSidebar(true)}
-                className="p-2 hover:bg-emerald-700 rounded-full transition-colors sm:hidden"
+                className="shrink-0 rounded-full p-1.5 hover:bg-emerald-700 transition-colors sm:hidden"
               >
-                <Menu className="w-6 h-6 text-white" />
+                <Menu className="w-5 h-5 text-white" />
               </button>
             )}
 
             {/* Logo */}
             <div
-              className="flex items-center gap-2 cursor-pointer shrink-0"
+              className="flex min-w-0 shrink items-center gap-1.5 sm:gap-2 cursor-pointer"
               onClick={() => {
                 setView("marketplace");
                 setSelectedProduct(null);
               }}
             >
-              <Leaf className="w-6 h-6 md:w-8 md:h-8 text-white" />
-              <span className="text-lg md:text-2xl font-black tracking-tighter hidden xs:block">
+              <Leaf className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 text-white" />
+              <span className="hidden truncate text-base font-black tracking-tighter min-[200px]:block md:text-2xl">
                 SAMAR MARKET
               </span>
             </div>
-
+            
             {/* Search Bar - Desktop */}
             <div
               id="search-bar"
@@ -727,37 +822,28 @@ export function BuyerInterface({
             </div>
 
             {/* Actions */}
-            <div className="flex items-center gap-3 md:gap-6">
-              {/* <button
-                onClick={() => setShowGuide(true)}
-                className="flex flex-col items-center gap-1 hover:text-emerald-100 transition-colors text-emerald-100/70"
-                title="How to Buy?"
-              >
-                <HelpCircle className="w-5 h-5 md:w-6 md:h-6" />
-                <span className="text-[10px] font-bold uppercase tracking-wider hidden md:block">
-                  Guide
-                </span>
-              </button> */}
-
+            <div className="flex shrink-0 items-center gap-1 sm:gap-2 md:gap-4">
               <button
                 onClick={() => setView("orders")}
-                className={`flex items-center gap-2 hover:text-emerald-100 transition-colors ${view === "orders" ? "text-white" : "text-emerald-100/70"}`}
+                className={`flex items-center justify-center rounded-full p-1.5 transition-colors sm:p-2 ${view === "orders" ? "text-white" : "text-emerald-100/70 hover:text-white"}`}
+                aria-label="My Orders"
               >
-                <Package className="w-5 h-5 md:w-6 md:h-6" />
-                <span className="text-sm font-medium hidden md:block">
+                <Package className="w-5 h-5 sm:w-6 sm:h-6" />
+                <span className="ml-1 hidden text-sm font-medium sm:inline">
                   My Orders
                 </span>
               </button>
 
-              <div className="flex items-center gap-2 md:gap-4">
+              <div className="flex items-center gap-1 sm:gap-2 md:gap-3">
                 <button
                   id="cart-button"
                   onClick={() => setShowCart(true)}
-                  className="relative p-2 hover:bg-emerald-700 rounded-full transition-colors"
+                  className="relative shrink-0 rounded-full p-1.5 transition-colors hover:bg-emerald-700 sm:p-2"
+                  aria-label="Cart"
                 >
-                  <ShoppingCart className="w-6 h-6 md:w-7 md:h-7" />
+                  <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6" />
                   {cartCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-white text-emerald-600 text-[10px] font-bold w-4 h-4 md:w-5 md:h-5 rounded-full flex items-center justify-center border-2 border-emerald-600">
+                    <span className="absolute -top-1 -right-1 bg-white text-emerald-600 text-[10px] font-bold w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center border-2 border-emerald-600">
                       {cartCount}
                     </span>
                   )}
@@ -767,10 +853,11 @@ export function BuyerInterface({
                   <button
                     id="user-menu"
                     onClick={() => setShowUserDropdown(!showUserDropdown)}
-                    className="flex items-center gap-2 p-1 hover:bg-emerald-700 rounded-full transition-colors"
+                    className="flex shrink-0 items-center gap-2 rounded-full p-1 transition-colors hover:bg-emerald-700"
+                    aria-label="User menu"
                   >
-                    <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-emerald-500 flex items-center justify-center border border-emerald-400">
-                      <User className="w-4 h-4 md:w-5 md:h-5 text-white" />
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-emerald-500 flex items-center justify-center border border-emerald-400">
+                      <User className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                     </div>
                   </button>
 
@@ -852,8 +939,9 @@ export function BuyerInterface({
           </div>
 
           {/* Mobile Search Bar */}
-          <div className="mt-3 relative sm:hidden">
+          <div className="relative mt-3 sm:hidden">
             <input
+              id="search-bar-mobile"
               type="text"
               placeholder="Search products..."
               value={search}
@@ -868,7 +956,7 @@ export function BuyerInterface({
       </header>
 
       {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main className="mx-auto w-full max-w-[430px] overflow-x-hidden px-2 py-4 sm:max-w-7xl sm:px-4 sm:py-8">
         <AnimatePresence mode="wait">
           {selectedProduct ? (
             <motion.div
@@ -1007,6 +1095,85 @@ export function BuyerInterface({
                   </div>
                 </div>
               </div>
+
+              <button
+                type="button"
+                onClick={() => setShowChat(true)}
+                aria-label={`Chat with ${selectedProduct.sellerName}`}
+                className="fixed bottom-6 right-6 z-40 flex items-center gap-3 rounded-full bg-emerald-600 px-5 py-4 text-white shadow-2xl shadow-emerald-900/25 transition-all hover:scale-105 hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-200"
+              >
+                <span className="absolute -inset-1 -z-10 animate-ping rounded-full bg-emerald-400/40" />
+                <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-white/15">
+                  <MessageSquare className="h-5 w-5" />
+                  {messages.filter((item) => item.senderId !== user.uid).length > 0 && (
+                    <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-emerald-600 bg-red-500 px-1 text-[10px] font-black">
+                      {Math.min(messages.filter((item) => item.senderId !== user.uid).length, 9)}
+                    </span>
+                  )}
+                </span>
+                <span className="hidden text-sm font-bold sm:inline">Chat with farmer</span>
+              </button>
+
+              <AnimatePresence>
+                {showChat && (
+                  <motion.section
+                    initial={{ opacity: 0, y: 24, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 24, scale: 0.96 }}
+                    className="fixed bottom-5 right-4 z-50 flex h-[min(600px,calc(100vh-7rem))] w-[min(390px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl"
+                  >
+                    <div className="flex items-center justify-between bg-emerald-700 px-5 py-4 text-white">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/15">
+                          <Store className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-100">Product chat</p>
+                          <h3 className="truncate font-bold">{selectedProduct.sellerName}</h3>
+                        </div>
+                      </div>
+                      <button type="button" onClick={() => setShowChat(false)} aria-label="Close chat" className="rounded-full p-2 text-emerald-100 hover:bg-white/10 hover:text-white">
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+                    <div className="border-b border-stone-100 bg-emerald-50 px-5 py-3 text-xs text-emerald-900">
+                      Ask about <span className="font-bold">{selectedProduct.name}</span>
+                    </div>
+                    <div className="flex-1 space-y-3 overflow-y-auto bg-stone-50 p-4">
+                      {messages.length === 0 ? (
+                        <div className="flex h-full flex-col items-center justify-center text-center text-stone-400">
+                          <MessageSquare className="mb-3 h-10 w-10 text-emerald-200" />
+                          <p className="text-sm font-medium">Start a conversation</p>
+                          <p className="mt-1 text-xs">The farmer can answer your questions here.</p>
+                        </div>
+                      ) : messages.map((item) => (
+                        <div key={item.id} className={`flex ${item.senderId === user.uid ? "justify-end" : "justify-start"}`}>
+                          <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${item.senderId === user.uid ? "rounded-br-sm bg-emerald-600 text-white" : "rounded-bl-sm border border-stone-200 bg-white text-stone-700"}`}>
+                            <p className="text-[10px] font-bold uppercase tracking-wider opacity-70">{item.senderId === user.uid ? "You" : item.sellerName}</p>
+                            <p className="break-words text-sm whitespace-pre-wrap">{item.message}</p>
+                            <p className="mt-1 text-[10px] opacity-60">{new Date(item.createdAt).toLocaleString()}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="border-t border-stone-100 bg-white p-3">
+                      <div className="flex gap-2">
+                        <input
+                          value={messageDraft}
+                          onChange={(event) => setMessageDraft(event.target.value)}
+                          onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } }}
+                          maxLength={2000}
+                          placeholder="Write your question..."
+                          className="min-w-0 flex-1 rounded-full border border-stone-200 bg-stone-50 px-4 py-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                        />
+                        <button type="button" onClick={sendMessage} disabled={!messageDraft.trim() || isSendingMessage} aria-label="Send message" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white transition-colors hover:bg-emerald-700 disabled:opacity-50">
+                          {isSendingMessage ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </motion.section>
+                )}
+              </AnimatePresence>
 
               {/* Seller Location Map */}
               <div className="bg-white rounded-sm shadow-sm p-8 space-y-6">
@@ -1166,9 +1333,9 @@ export function BuyerInterface({
               className="space-y-8"
             >
               {/* Quick Guide Banner */}
-              <div className="bg-emerald-600 rounded-sm p-4 md:p-6 text-white relative overflow-hidden shadow-lg shadow-emerald-600/20">
-                <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-4 md:gap-6">
-                  <div className="space-y-1 md:space-y-2 text-center md:text-left">
+              {/* <div className="relative min-w-0 overflow-hidden rounded-sm bg-emerald-600 p-4 text-white shadow-lg shadow-emerald-600/20 md:p-6">
+                <div className="relative z-10 flex min-w-0 flex-col items-center justify-between gap-4 md:flex-row md:gap-6">
+                  <div className="min-w-0 space-y-1 text-center md:space-y-2 md:text-left">
                     <h3 className="text-lg md:text-2xl font-bold">
                       Welcome to Samar Farm Market!
                     </h3>
@@ -1179,7 +1346,7 @@ export function BuyerInterface({
                   </div>
                   <button
                     onClick={() => setShowGuide(true)}
-                    className="w-full md:w-auto px-6 md:px-8 py-2.5 md:py-3 bg-white text-emerald-600 font-bold rounded-sm hover:bg-emerald-50 transition-all shadow-sm flex items-center justify-center gap-2 text-sm"
+                    className="w-full shrink-0 rounded-sm bg-white px-6 py-2.5 text-sm font-bold text-emerald-600 shadow-sm transition-all hover:bg-emerald-50 md:w-auto md:px-8 md:py-3"
                   >
                     <Navigation className="w-4 h-4" />
                     Start Guided Tour
@@ -1188,7 +1355,7 @@ export function BuyerInterface({
                 <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/4 opacity-10 hidden md:block">
                   <Leaf className="w-64 h-64" />
                 </div>
-              </div>
+              </div> */}
 
               {/* Category Bar */}
               <div className="bg-white p-2 md:p-4 rounded-sm shadow-sm flex items-center gap-2 md:gap-4 overflow-x-auto no-scrollbar">
@@ -1326,16 +1493,16 @@ export function BuyerInterface({
                 </div>
 
                 {/* Product Grid */}
-                <div id="product-grid" className="flex-1">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div id="product-grid" className="min-w-0 flex-1">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
                     {filteredProducts.map((product) => (
                       <motion.div
                         layout
                         key={product.id}
                         onClick={() => setSelectedProduct(product)}
-                        className="bg-white rounded-sm border border-stone-100 overflow-hidden shadow-sm hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer group"
+                        className="min-w-0 bg-white rounded-xl border border-stone-100 overflow-hidden shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group"
                       >
-                        <div className="aspect-square relative overflow-hidden">
+                        <div className="relative aspect-[4/3] overflow-hidden sm:aspect-square">
                           <img
                             src={product.imageUrl}
                             alt={product.name}
@@ -1365,12 +1532,12 @@ export function BuyerInterface({
                             {product.category}
                           </div>
                         </div>
-                        <div className="p-3 space-y-2">
-                          <div className="flex justify-between items-start">
-                            <h4 className="text-sm font-medium text-stone-900 line-clamp-2 min-h-[40px]">
+                        <div className="min-w-0 space-y-1.5 p-2 sm:space-y-2 sm:p-3">
+                          <div className="flex min-w-0 items-start justify-between gap-2">
+                            <h4 className="min-w-0 flex-1 text-[10px] font-semibold leading-tight text-stone-900 line-clamp-2 sm:text-sm sm:min-h-[40px]">
                               {product.name}
                             </h4>
-                            <div className="flex items-center gap-0.5 mt-1 shrink-0">
+                            <div className="mt-1 flex shrink-0 items-center gap-0.5">
 
                      {/* // Rating display is currently disabled since reviews are not implemented yet. Uncomment when ready. ---------------------------------------------------  */}
                               {/* <Star className="w-3 h-3 text-yellow-400 fill-current" />
@@ -1392,17 +1559,17 @@ export function BuyerInterface({
                               </span> */}
                             </div>
                           </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-emerald-600 font-bold text-lg">
+                          <div className="flex min-w-0 items-center justify-between gap-2">
+                            <span className="text-xs font-bold text-emerald-600 sm:text-lg">
                               ₱{product.price}
                             </span>
-                            <span className="text-[10px] text-stone-400">
+                            <span className="max-w-[48%] truncate text-[8px] text-stone-400 sm:text-[10px]">
                               {product.municipality}
                             </span>
                           </div>
                           <button
                             onClick={(e) => addToCart(product, e)}
-                            className="w-full py-2 bg-stone-50 hover:bg-emerald-600 hover:text-white text-stone-600 text-xs font-bold rounded-sm transition-colors flex items-center justify-center gap-2"
+                            className="flex w-full items-center justify-center gap-1 rounded-sm bg-stone-50 py-1.5 text-[10px] font-bold text-stone-600 transition-colors hover:bg-emerald-600 hover:text-white sm:gap-2 sm:py-2 sm:text-xs"
                           >
                             <ShoppingCart className="w-3.5 h-3.5" />
                             Add
@@ -1879,7 +2046,7 @@ export function BuyerInterface({
                 <div className="flex flex-col items-end gap-1">
                   <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-4 py-2 rounded-full text-sm font-bold">
                     <Calendar className="w-4 h-4" />
-                    Delivery every Saturday
+                    Pick up every Saturday
                   </div>
                   <p className="text-[10px] text-stone-400 italic">
                     Reviews become available once your order is collected or
@@ -1911,9 +2078,11 @@ export function BuyerInterface({
                       <div className="flex items-center gap-4">
                         <div
                           className={`w-14 h-14 rounded-sm flex items-center justify-center ${
-                            order.status === "pending"
-                              ? "bg-blue-50 text-blue-600"
-                              : "bg-emerald-50 text-emerald-600"
+                            order.status === "completed"
+                              ? "bg-emerald-50 text-emerald-600"
+                              : order.status === "ready_to_pick_up"
+                                ? "bg-orange-50 text-orange-600"
+                                : "bg-blue-50 text-blue-600"
                           }`}
                         >
                           <Package className="w-7 h-7" />
@@ -1946,7 +2115,7 @@ export function BuyerInterface({
                         </div>
                         <div className="col-span-2 md:col-span-1">
                           <p className="text-[10px] uppercase tracking-widest text-stone-400 font-bold mb-1">
-                            Delivery Date
+                            Pick Up Date
                           </p>
                           <p className="font-bold text-stone-700">
                             {order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString() : ""}
@@ -1955,14 +2124,16 @@ export function BuyerInterface({
                       </div>
                       <div
                         className={`px-6 py-2 rounded-sm text-xs font-bold uppercase tracking-widest text-center ${
-                          order.status === "pending"
-                            ? "bg-blue-50 text-blue-600"
-                            : "bg-emerald-50 text-emerald-600"
+                          order.status === "completed"
+                            ? "bg-emerald-50 text-emerald-600"
+                            : order.status === "ready_to_pick_up"
+                              ? "bg-orange-50 text-orange-600"
+                              : "bg-blue-50 text-blue-600"
                         }`}
                       >
-                        {order.status}
+                        {order.status === "ready_to_pick_up" ? "Ready to pick up" : order.status === "preparing" ? "Preparing" : "Completed"}
                       </div>
-                      {/* {order.status === "delivered" &&
+                      {order.status === "completed" &&
                         !reviews.find((r) => r.orderId === order.id) && (
                           <button
                             onClick={() => setReviewingOrder(order)}
@@ -1970,7 +2141,7 @@ export function BuyerInterface({
                           >
                             Leave a Review
                           </button>
-                        )} */}
+                        )}
                       {reviews.find((r) => r.orderId === order.id) && (
                         <div className="flex items-center gap-1 text-emerald-600">
                           <Star className="w-4 h-4 fill-current" />
@@ -2317,7 +2488,7 @@ export function BuyerInterface({
                   <p className="text-[10px] text-blue-800 leading-relaxed">
                     All orders are delivered every{" "}
                     <span className="font-bold">Saturday</span>. Orders placed
-                    after Thursday 12:00 PM will be delivered the following
+                    after Thursday 12:00 PM will be ready to pick up the following
                     week.
                   </p>
                 </div>

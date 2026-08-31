@@ -94,7 +94,7 @@ export default function App() {
       productName: "Premium Samar Rice",
       quantity: 2,
       totalPrice: 240,
-      status: "delivered",
+      status: "completed",
       deliveryDate: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     },
@@ -108,7 +108,7 @@ export default function App() {
       productName: "Sweet Potatoes (Kamote)",
       quantity: 1,
       totalPrice: 45,
-      status: "delivered",
+      status: "completed",
       deliveryDate: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     },
@@ -122,7 +122,7 @@ export default function App() {
       productName: "Fresh Calamansi",
       quantity: 5,
       totalPrice: 150,
-      status: "pending",
+      status: "preparing",
       deliveryDate: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     },
@@ -136,7 +136,7 @@ export default function App() {
       productName: "Fresh Calamansi",
       quantity: 3,
       totalPrice: 90,
-      status: "collected",
+      status: "ready_to_pick_up",
       deliveryDate: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     },
@@ -283,6 +283,11 @@ export default function App() {
             setProducts((prev) => prev.map(p => p.sellerId === profile.uid ? { ...p, municipality: (profile as any).municipality || p.municipality, location: (profile as any).location || p.location } : p));
             if (user?.uid === profile.uid) setUser(profile);
           }
+          if (msg.type === 'order:updated' && msg.payload?.id) {
+            setOrders((prev) => prev.map((order) =>
+              order.id === msg.payload.id ? { ...order, ...msg.payload } : order,
+            ));
+          }
         } catch (e) {
           console.error('BC handler exception', e);
         }
@@ -291,6 +296,51 @@ export default function App() {
       console.error("Session restore error", e);
     }
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const API = ((import.meta.env.VITE_API_BASE as string) || "http://localhost:4000").replace(/\/+$/, '');
+    const token = localStorage.getItem("idToken");
+    const refreshReviews = async () => {
+      try {
+        const res = await fetch(`${API}/reviews`, { headers: { Authorization: `Bearer ${token || ''}` } });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data.reviews)) setReviews(data.reviews);
+      } catch (error) {
+        console.error("Fetch reviews error", error);
+      }
+    };
+    refreshReviews();
+    const interval = window.setInterval(refreshReviews, 5000);
+    return () => window.clearInterval(interval);
+  }, [user?.uid, user?.role]);
+
+  // Keep a buyer's order status current while a farmer updates it.
+  useEffect(() => {
+    if (!user || user.role !== "buyer") return;
+    const API = ((import.meta.env.VITE_API_BASE as string) || "http://localhost:4000").replace(/\/+$/, '');
+    const refreshOrders = async () => {
+      const token = localStorage.getItem("idToken");
+      if (!token) return;
+      try {
+        const response = await fetch(`${API}/orders`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (Array.isArray(data.orders)) {
+          setOrders(data.orders.map((order: any) => ({ ...order, id: order.id || order._id })));
+        }
+      } catch (error) {
+        console.error("Refresh buyer orders error", error);
+      }
+    };
+
+    refreshOrders();
+    const interval = window.setInterval(refreshOrders, 5000);
+    return () => window.clearInterval(interval);
+  }, [user?.uid, user?.role]);
 
   // Listen for order updates dispatched from child components (BuyerInterface) and merge into state
   useEffect(() => {
@@ -324,6 +374,7 @@ export default function App() {
           return;
         }
         setProducts((prev) => prev.filter((p) => p.id !== id));
+        broadcast('products:refresh', { deletedProductId: id, ts: Date.now() });
       })
       .catch((err) => console.error("Delete product error:", err));
   };
@@ -380,13 +431,17 @@ export default function App() {
       .catch((err) => console.error("Place order error:", err));
   };
 
-  const addReview = (review: Omit<Review, "id" | "createdAt">) => {
-    const newReview: Review = {
-      ...review,
-      id: Math.random().toString(36).substr(2, 9),
-      createdAt: new Date().toISOString(),
-    };
-    setReviews([...reviews, newReview]);
+  const addReview = async (review: Omit<Review, "id" | "createdAt">) => {
+    const API = ((import.meta.env.VITE_API_BASE as string) || "http://localhost:4000").replace(/\/+$/, '');
+    const token = localStorage.getItem("idToken");
+    const response = await fetch(`${API}/reviews`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(review),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Failed to submit review");
+    if (data.review) setReviews((previous) => [data.review, ...previous.filter((item) => item.id !== data.review.id)]);
   };
 
   const updateOrderStatus = (orderId: string, status: Order["status"]) => {
@@ -411,6 +466,7 @@ export default function App() {
         setOrders((prev) =>
           prev.map((o) => (o.id === orderId ? { ...o, ...updated } : o)),
         );
+        broadcast('order:updated', updated);
       })
       .catch((err) => {
         console.error("Update order status error:", err);

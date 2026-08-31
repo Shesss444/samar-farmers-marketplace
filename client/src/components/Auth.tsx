@@ -20,6 +20,10 @@ export function Auth({ onAuthSuccess }: AuthProps) {
   const [municipality, setMunicipality] = useState(MUNICIPALITIES[0]);
   const [phone, setPhone] = useState("");
   const [primaryProducts, setPrimaryProducts] = useState("");
+  const [photoURL, setPhotoURL] = useState("");
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [resetToken, setResetToken] = useState("");
+  const [newPassword, setNewPassword] = useState("");
 
   const API = (import.meta.env.VITE_API_BASE || "http://localhost:4000").replace(/\/+$/, '');
 
@@ -30,6 +34,34 @@ export function Auth({ onAuthSuccess }: AuthProps) {
     setSuccess("");
 
     try {
+      if (isForgotPassword && resetToken) {
+        const res = await fetch(`${API}/reset-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: resetToken, password: newPassword }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Password reset failed");
+        setSuccess("Password reset successfully. You can now sign in.");
+        setResetToken("");
+        setNewPassword("");
+        setIsForgotPassword(false);
+        return;
+      }
+
+      if (isForgotPassword) {
+        const res = await fetch(`${API}/forgot-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Password reset request failed");
+        setSuccess(data.message || "If the account exists, a reset link has been requested.");
+        if (data.resetToken) setResetToken(data.resetToken);
+        return;
+      }
+
       if (isLogin) {
         const res = await fetch(`${API}/signin`, {
           method: "POST",
@@ -43,7 +75,7 @@ export function Auth({ onAuthSuccess }: AuthProps) {
         if (data.idToken) localStorage.setItem("idToken", data.idToken);
         onAuthSuccess({ ...(data.profile || {}), uid: data.uid });
       } else {
-        const payload: any = { email, password, displayName, role };
+        const payload: any = { email, password, displayName, role, phone, photoURL: photoURL || undefined };
         if (role === "farmer") {
           payload.municipality = municipality;
           payload.phone = phone;
@@ -149,17 +181,21 @@ export function Auth({ onAuthSuccess }: AuthProps) {
         <div className="md:w-1/2 p-12">
           <div className="mb-8">
             <h3 className="text-2xl font-bold text-stone-900 mb-2">
-              {isLogin ? "Welcome Back" : "Create Account"}
+              {isForgotPassword ? (resetToken ? "Reset Password" : "Forgot Password") : isLogin ? "Welcome Back" : "Create Account"}
             </h3>
             <p className="text-stone-500">
-              {isLogin
+              {isForgotPassword
+                ? resetToken
+                  ? "Choose a new password for your account"
+                  : "Enter your email to request a password reset"
+                : isLogin
                 ? "Sign in to your account"
                 : "Join our community of farmers and buyers"}
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {!isLogin && (
+            {!isLogin && !isForgotPassword && (
               <div className="space-y-1">
                 <label className="text-sm font-semibold text-stone-700">
                   Full Name
@@ -195,7 +231,7 @@ export function Auth({ onAuthSuccess }: AuthProps) {
               </div>
             </div>
 
-            <div className="space-y-1">
+            {!isForgotPassword && !resetToken && <div className="space-y-1">
               <label className="text-sm font-semibold text-stone-700">
                 Password
               </label>
@@ -210,9 +246,25 @@ export function Auth({ onAuthSuccess }: AuthProps) {
                   placeholder="••••••••"
                 />
               </div>
-            </div>
+            </div>}
 
-            {!isLogin && (
+            {isForgotPassword && resetToken && (
+
+              // HIDE TOKEN INPUT FIELD, USE THE TOKEN RETURNED FROM THE API INSTEAD
+              // Reset password
+              <>
+                {/* <div className="space-y-1">
+                  <label className="text-sm font-semibold text-stone-700">Reset Token</label>
+                  <input required type="text" value={resetToken} onChange={(e) => setResetToken(e.target.value)} className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" />
+                </div> */}
+                <div className="space-y-1">
+                  <label className="text-sm font-semibold text-stone-700">New Password</label>
+                  <input required minLength={8} type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="At least 8 characters" />
+                </div>
+              </>
+            )}
+
+            {!isLogin && !isForgotPassword && (
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-sm font-semibold text-stone-700">
@@ -251,7 +303,33 @@ export function Auth({ onAuthSuccess }: AuthProps) {
               </div>
             )}
 
-            {!isLogin && role === "farmer" && (
+            {!isLogin && !isForgotPassword && (
+              <div className="space-y-1">
+                <label className="text-sm font-semibold text-stone-700">Contact Number</label>
+                <input required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all" placeholder="0912 345 6789" />
+              </div>
+            )}
+
+            {!isLogin && !isForgotPassword && (
+              <div className="space-y-1">
+                <label className="text-sm font-semibold text-stone-700">Profile Photo</label>
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  if (file.size > 2 * 1024 * 1024) {
+                    setError("Profile photo must be 2MB or smaller.");
+                    e.target.value = "";
+                    return;
+                  }
+                  const reader = new FileReader();
+                  reader.onload = () => setPhotoURL(String(reader.result));
+                  reader.readAsDataURL(file);
+                }} className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm" />
+                {photoURL && <img src={photoURL} alt="Profile preview" className="w-16 h-16 rounded-full object-cover border border-stone-200" />}
+              </div>
+            )}
+
+            {!isLogin && !isForgotPassword && role === "farmer" && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
@@ -262,22 +340,6 @@ export function Auth({ onAuthSuccess }: AuthProps) {
                   <h4 className="text-xs font-bold text-stone-400 uppercase tracking-wider">
                     Farmer Registration Details
                   </h4>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-sm font-semibold text-stone-700">
-                      Phone Number
-                    </label>
-                    <input
-                      required
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                      placeholder="0912 345 6789"
-                    />
-                  </div>
                 </div>
 
                 <div className="space-y-1">
@@ -306,6 +368,8 @@ export function Auth({ onAuthSuccess }: AuthProps) {
             >
               {loading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
+              ) : isForgotPassword ? (
+                resetToken ? "Reset Password" : "Request Reset"
               ) : isLogin ? (
                 "Sign In"
               ) : (
@@ -314,8 +378,13 @@ export function Auth({ onAuthSuccess }: AuthProps) {
             </button>
           </form>
 
-          <div className="mt-8 text-center">
-            <button
+          <div className="mt-8 text-center space-y-3">
+            {isLogin && <button type="button" onClick={() => {
+              setIsForgotPassword(true);
+              setError("");
+              setSuccess("");
+            }} className="block w-full text-stone-500 hover:text-emerald-600 font-medium transition-colors">Forgot password?</button>}
+            {!isForgotPassword && <button type="button"
               onClick={() => {
                 setIsLogin(!isLogin);
                 setError("");
@@ -326,7 +395,14 @@ export function Auth({ onAuthSuccess }: AuthProps) {
               {isLogin
                 ? "Don't have an account? Sign up"
                 : "Already have an account? Sign in"}
-            </button>
+            </button>}
+            {isForgotPassword && <button type="button" onClick={() => {
+              setIsForgotPassword(false);
+              setResetToken("");
+              setNewPassword("");
+              setError("");
+              setSuccess("");
+            }} className="block w-full text-stone-500 hover:text-emerald-600 font-medium transition-colors">Back to sign in</button>}
           </div>
         </div>
       </motion.div>

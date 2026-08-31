@@ -51,7 +51,7 @@ export interface Order {
   productName: string;
   quantity: number;
   totalPrice: number;
-  status: 'pending' | 'collected' | 'delivered';
+  status: 'preparing' | 'ready_to_pick_up' | 'completed';
   deliveryDate?: string;
   createdAt?: string;
 }
@@ -65,6 +65,20 @@ export interface Review {
   productId: string;
   rating: number;
   comment: string;
+  createdAt: string;
+}
+
+export interface Message {
+  id: string;
+  productId: string;
+  productName: string;
+  buyerId: string;
+  buyerName: string;
+  sellerId: string;
+  sellerName: string;
+  senderId: string;
+  senderRole: 'buyer' | 'farmer';
+  message: string;
   createdAt: string;
 }
 

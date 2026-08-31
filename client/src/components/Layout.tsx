@@ -1,6 +1,6 @@
 import React from 'react';
 import { UserProfile } from '../types';
-import { LogOut, User, ShoppingCart, LayoutDashboard, Map as MapIcon, Leaf, ShoppingBag, Star, ShieldCheck, Users, CheckCircle2 } from 'lucide-react';
+import { LogOut, User, ShoppingCart, LayoutDashboard, Map as MapIcon, Leaf, ShoppingBag, Star, ShieldCheck, Users, CheckCircle2, MessageSquare } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -76,6 +76,12 @@ export function Layout({ user, onSignOut, children, activeView, onViewChange, pe
                   onClick={() => onViewChange?.('completed_orders')}
                 />
                 <NavItem 
+                  icon={<MessageSquare className="w-5 h-5" />} 
+                  label="Messages" 
+                  active={activeView === 'messages'} 
+                  onClick={() => onViewChange?.('messages')}
+                />
+                <NavItem 
                   icon={<MapIcon className="w-5 h-5" />} 
                   label="Location" 
                   active={activeView === 'location'} 
@@ -83,12 +89,12 @@ export function Layout({ user, onSignOut, children, activeView, onViewChange, pe
                 />
 
             {/* Layout Reviews sidebar farmer--------------------------------------- */}
-                {/* <NavItem 
+                <NavItem 
                   icon={<Star className="w-5 h-5" />} 
                   label="Reviews" 
                   active={activeView === 'reviews'} 
                   onClick={() => onViewChange?.('reviews')}
-                /> */}
+                />
               </>
             )}
 

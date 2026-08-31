@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { UserProfile, Product, Order, Review, CATEGORIES, MUNICIPALITIES } from '../types';
-import { Plus, Package, ShoppingBag, Calendar, Trash2, Edit2, Loader2, CheckCircle2, Clock, MapPin, Save, Map as MapIcon, User, Mail, Phone, Building, Search, Star, Info, Leaf, TrendingUp, BarChart3, AlertTriangle, Bell } from 'lucide-react';
+import { UserProfile, Product, Order, Review, Message, CATEGORIES, MUNICIPALITIES } from '../types';
+import { Plus, Package, ShoppingBag, Calendar, Trash2, Edit2, Loader2, CheckCircle2, Clock, MapPin, Save, Map as MapIcon, User, Mail, Phone, Building, Search, Star, Info, Leaf, TrendingUp, BarChart3, AlertTriangle, Bell, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
@@ -40,6 +40,7 @@ const SAMAR_CENTER = { lat: 11.78, lng: 124.88 };
 export function FarmerDashboard({ user, products, orders, reviews, onAddProduct, onDeleteProduct, onUpdateProduct, onUpdateOrderStatus, onUpdateUser, activeView }: FarmerDashboardProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [newProduct, setNewProduct] = useState<Omit<Product, 'id' | 'createdAt'>>({
     sellerId: user.uid,
@@ -128,6 +129,13 @@ export function FarmerDashboard({ user, products, orders, reviews, onAddProduct,
   };
 
   const handleDeleteProduct = (id: string, name: string) => {
+    setProductToDelete(products.find(product => product.id === id) || { id, name } as Product);
+  };
+
+  const confirmDeleteProduct = () => {
+    if (!productToDelete) return;
+    const { id, name } = productToDelete;
+    setProductToDelete(null);
     onDeleteProduct(id);
     toast.error('Product deleted', {
       description: `${name} has been removed from your listings.`,
@@ -139,7 +147,7 @@ export function FarmerDashboard({ user, products, orders, reviews, onAddProduct,
     onUpdateOrderStatus(id, status);
     toast.info(`Order ${status}`, {
       description: `Order for ${productName} is now ${status}.`,
-      icon: status === 'delivered' ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> : <Clock className="w-5 h-5 text-orange-500" />
+      icon: status === 'completed' ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> : <Clock className="w-5 h-5 text-orange-500" />
     });
   };
 
@@ -175,15 +183,17 @@ export function FarmerDashboard({ user, products, orders, reviews, onAddProduct,
   const renderContent = () => {
     switch (activeView) {
       case 'orders':
-        return <OrdersSection orders={orders.filter(o => o.status !== 'delivered')} onUpdateOrderStatus={handleUpdateOrderStatus} title="Active Orders" />;
+        return <OrdersSection orders={orders.filter(o => o.status !== 'completed')} onUpdateOrderStatus={handleUpdateOrderStatus} title="Active Orders" />;
       case 'completed_orders':
-        return <OrdersSection orders={orders.filter(o => o.status === 'delivered')} onUpdateOrderStatus={handleUpdateOrderStatus} title="Completed Orders" />;
+        return <OrdersSection orders={orders.filter(o => o.status === 'completed')} onUpdateOrderStatus={handleUpdateOrderStatus} title="Completed Orders" />;
       case 'location':
         return <LocationSection user={user} onUpdateUser={handleUpdateUser} />;
       case 'profile':
         return <ProfileSection user={user} onUpdateUser={handleUpdateUser} />;
       case 'reviews':
         return <ReviewsSection reviews={reviews} />;
+      case 'messages':
+        return <MessagesSection user={user} />;
       default:
         return (
           <div className="space-y-8">
@@ -261,7 +271,7 @@ export function FarmerDashboard({ user, products, orders, reviews, onAddProduct,
               <StatCard 
                 icon={<ShoppingBag className="w-6 h-6 text-blue-600" />} 
                 label="Active Orders" 
-                value={orders.filter(o => o.status !== 'delivered').length} 
+                value={orders.filter(o => o.status !== 'completed').length} 
                 color="bg-blue-50"
               />
               <StatCard 
@@ -411,7 +421,7 @@ export function FarmerDashboard({ user, products, orders, reviews, onAddProduct,
             
             <OrdersSection 
               orders={orders
-                .filter(o => o.status !== 'delivered')
+                .filter(o => o.status !== 'completed')
                 .sort((a, b) => (b.createdAt ? new Date(b.createdAt).getTime() : 0) - (a.createdAt ? new Date(a.createdAt).getTime() : 0))
                 .slice(0, 5)} 
               onUpdateOrderStatus={handleUpdateOrderStatus} 
@@ -425,6 +435,48 @@ export function FarmerDashboard({ user, products, orders, reviews, onAddProduct,
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {renderContent()}
+
+      <AnimatePresence>
+        {productToDelete && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-stone-900/55 p-4 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 12 }}
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="delete-product-title"
+              className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+            >
+              <div className="border-b border-red-100 bg-red-50 px-6 py-5">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-100 text-red-600">
+                    <AlertTriangle className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 id="delete-product-title" className="text-lg font-bold text-stone-900">Delete product?</h3>
+                    <p className="mt-1 text-sm leading-relaxed text-stone-600">This action will remove the listing from the marketplace.</p>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-5 p-6">
+                <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+                  <p className="text-xs font-bold uppercase tracking-widest text-stone-400">Product to delete</p>
+                  <p className="mt-1 truncate font-bold text-stone-900">{productToDelete.name}</p>
+                  <p className="mt-1 text-xs text-stone-500">Buyers will no longer see this product.</p>
+                </div>
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                  <button type="button" onClick={() => setProductToDelete(null)} className="rounded-xl border border-stone-200 px-5 py-3 text-sm font-bold text-stone-600 transition-colors hover:bg-stone-50">Cancel</button>
+                  <button type="button" onClick={confirmDeleteProduct} className="flex items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-red-600/20 transition-colors hover:bg-red-700">
+                    <Trash2 className="h-4 w-4" />
+                    Delete Product
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Add Product Modal */}
       <AnimatePresence>
@@ -709,44 +761,30 @@ function OrdersSection({ orders, onUpdateOrderStatus, title = "Orders" }: { orde
                 <div className="flex flex-col items-start md:items-end gap-1">
                   <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest md:hidden">Status</span>
                   <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
-                    order.status === 'pending' ? 'bg-blue-50 text-blue-600' :
-                    order.status === 'collected' ? 'bg-orange-50 text-orange-600' :
+                    order.status === 'preparing' ? 'bg-blue-50 text-blue-600' :
+                    order.status === 'ready_to_pick_up' ? 'bg-orange-50 text-orange-600' :
                     'bg-emerald-50 text-emerald-600'
                   }`}>
                     <div className={`w-1.5 h-1.5 rounded-full ${
-                      order.status === 'pending' ? 'bg-blue-600' :
-                      order.status === 'collected' ? 'bg-orange-600' :
+                      order.status === 'preparing' ? 'bg-blue-600' :
+                      order.status === 'ready_to_pick_up' ? 'bg-orange-600' :
                       'bg-emerald-600'
                     }`} />
-                    {order.status}
+                    {order.status === 'preparing' ? 'Preparing' : order.status === 'ready_to_pick_up' ? 'Ready to pick up' : 'Completed'}
                   </span>
                 </div>
 
                 <div className="flex gap-2">
-                  {order.status === 'pending' && (
-                    <button 
-                      onClick={() => onUpdateOrderStatus(order.id, 'collected', order.productName)}
-                      className="flex items-center gap-2 px-4 py-2 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-100 transition-all text-xs font-bold"
-                    >
-                      <Clock className="w-4 h-4" />
-                      Mark Collected
-                    </button>
-                  )}
-                  {order.status === 'collected' && (
-                    <button 
-                      onClick={() => onUpdateOrderStatus(order.id, 'delivered', order.productName)}
-                      className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-all text-xs font-bold"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      Mark Delivered
-                    </button>
-                  )}
-                  {order.status === 'delivered' && (
-                    <div className="flex items-center gap-2 px-4 py-2 bg-stone-50 text-stone-400 rounded-xl text-xs font-bold">
-                      <CheckCircle2 className="w-4 h-4" />
-                      Completed
-                    </div>
-                  )}
+                  <select
+                    aria-label={`Change status for ${order.productName}`}
+                    value={order.status}
+                    onChange={(event) => onUpdateOrderStatus(order.id, event.target.value as Order['status'], order.productName)}
+                    className="px-3 py-2 bg-white border border-stone-200 text-stone-700 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
+                  >
+                    <option value="preparing">Preparing</option>
+                    <option value="ready_to_pick_up">Ready to pick up</option>
+                    <option value="completed">Completed</option>
+                  </select>
                 </div>
               </div>
             </motion.div>
@@ -1303,6 +1341,96 @@ function ReviewsSection({ reviews }: { reviews: Review[] }) {
           ))
         )}
       </div>
+    </div>
+  );
+}
+
+function MessagesSection({ user }: { user: UserProfile }) {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const [sendingId, setSendingId] = useState<string | null>(null);
+
+  const loadMessages = async () => {
+    const API = ((import.meta.env.VITE_API_BASE as string) || 'http://localhost:4000').replace(/\/+$/, '');
+    const token = localStorage.getItem('idToken');
+    try {
+      const response = await fetch(`${API}/messages`, { headers: { Authorization: `Bearer ${token || ''}` } });
+      if (!response.ok) return;
+      const data = await response.json();
+      if (Array.isArray(data.messages)) setMessages(data.messages);
+    } catch (error) {
+      console.error('Fetch farmer messages error', error);
+    }
+  };
+
+  useEffect(() => {
+    loadMessages();
+    const interval = window.setInterval(loadMessages, 5000);
+    return () => window.clearInterval(interval);
+  }, [user.uid]);
+
+  const sendReply = async (message: Message) => {
+    const text = (replyDrafts[message.productId + message.buyerId] || '').trim();
+    if (!text || sendingId) return;
+    setSendingId(message.productId + message.buyerId);
+    const API = ((import.meta.env.VITE_API_BASE as string) || 'http://localhost:4000').replace(/\/+$/, '');
+    const token = localStorage.getItem('idToken');
+    try {
+      const response = await fetch(`${API}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token || ''}` },
+        body: JSON.stringify({ productId: message.productId, buyerId: message.buyerId, message: text }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Unable to send reply');
+      if (data.message) setMessages((previous) => [...previous, data.message]);
+      setReplyDrafts((previous) => ({ ...previous, [message.productId + message.buyerId]: '' }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to send reply');
+    } finally {
+      setSendingId(null);
+    }
+  };
+
+  const conversations = Array.from(new Map(messages.map((message) => [`${message.productId}:${message.buyerId}`, message])).values());
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h2 className="text-3xl font-bold text-stone-900">Messages</h2>
+        <p className="text-stone-500">Answer buyer questions about your products.</p>
+      </div>
+      {conversations.length === 0 ? (
+        <div className="bg-white rounded-3xl border-2 border-dashed border-stone-200 p-12 text-center">
+          <MessageSquare className="w-12 h-12 text-stone-300 mx-auto mb-4" />
+          <p className="text-stone-500">No buyer messages yet.</p>
+        </div>
+      ) : conversations.map((conversation) => {
+        const conversationMessages = messages.filter((message) => message.productId === conversation.productId && message.buyerId === conversation.buyerId);
+        const draftKey = conversation.productId + conversation.buyerId;
+        return (
+          <section key={draftKey} className="bg-white rounded-3xl border border-stone-100 shadow-sm p-6 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h3 className="font-bold text-stone-900">{conversation.productName}</h3>
+                <p className="text-xs text-stone-500">Conversation with {conversation.buyerName}</p>
+              </div>
+              <MessageSquare className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div className="space-y-2 max-h-64 overflow-y-auto bg-stone-50 rounded-2xl p-4">
+              {conversationMessages.map((message) => (
+                <div key={message.id} className={`flex ${message.senderId === user.uid ? 'justify-end' : 'justify-start'}`}>
+                  <p className={`max-w-[80%] px-3 py-2 rounded-xl text-sm ${message.senderId === user.uid ? 'bg-emerald-600 text-white' : 'bg-white border border-stone-200 text-stone-700'}`}>{message.message}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input value={replyDrafts[draftKey] || ''} onChange={(event) => setReplyDrafts((previous) => ({ ...previous, [draftKey]: event.target.value }))} maxLength={2000} placeholder="Write a reply..." className="flex-1 px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none" />
+              <button onClick={() => sendReply(conversation)} disabled={!replyDrafts[draftKey]?.trim() || sendingId === draftKey} className="px-5 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm disabled:opacity-50">Reply</button>
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }

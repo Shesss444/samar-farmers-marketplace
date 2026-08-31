@@ -143,9 +143,18 @@ export function AdminDashboard({
                       >
                         <td className="px-8 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center font-bold text-emerald-600">
-                              {u.displayName.charAt(0)}
-                            </div>
+                            {u.photoURL ? (
+                              <img
+                                src={u.photoURL}
+                                alt={u.displayName}
+                                className="w-10 h-10 rounded-full object-cover border border-emerald-200"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center font-bold text-emerald-600">
+                                {u.displayName.charAt(0)}
+                              </div>
+                            )}
                             <div>
                               <p className="font-bold text-stone-900">
                                 {u.displayName}
@@ -294,9 +303,18 @@ export function AdminDashboard({
             >
               <div className="p-8 border-b border-stone-100 flex justify-between items-center bg-stone-50/50">
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-600 text-2xl font-bold">
-                    {viewingFarmer.displayName.charAt(0)}
-                  </div>
+                  {viewingFarmer.photoURL ? (
+                    <img
+                      src={viewingFarmer.photoURL}
+                      alt={viewingFarmer.displayName}
+                      className="w-16 h-16 rounded-2xl object-cover border border-emerald-200 shadow-sm"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-600 text-2xl font-bold">
+                      {viewingFarmer.displayName.charAt(0)}
+                    </div>
+                  )}
                   <div>
                     <h3 className="text-2xl font-bold text-stone-900">
                       {viewingFarmer.displayName}
@@ -313,6 +331,24 @@ export function AdminDashboard({
               </div>
 
               <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto">
+                <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+                  <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-3">
+                    Uploaded Profile Photo
+                  </p>
+                  {viewingFarmer.photoURL ? (
+                    <img
+                      src={viewingFarmer.photoURL}
+                      alt={`${viewingFarmer.displayName} profile`}
+                      className="w-full max-w-sm h-56 object-cover rounded-2xl border border-stone-200 shadow-sm mx-auto"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-full max-w-sm h-56 rounded-2xl bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-400 text-sm mx-auto">
+                      No profile photo uploaded
+                    </div>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-8">
                   <div className="space-y-1">
                     <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">
@@ -461,10 +497,27 @@ export function AdminDashboard({
 
         {editingUser ? (
           <div className="bg-white p-8 rounded-3xl border border-stone-100 shadow-sm max-w-4xl">
-            <h3 className="text-xl font-bold text-stone-800 mb-8 flex items-center gap-2">
-              <User className="w-5 h-5 text-blue-600" />
-              Manage Profile: {editingUser.displayName}
-            </h3>
+            <div className="flex items-center gap-4 mb-8">
+              {editingUser.photoURL ? (
+                <img
+                  src={editingUser.photoURL}
+                  alt={editingUser.displayName}
+                  className="w-16 h-16 rounded-full object-cover border border-blue-200 shadow-sm"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-2xl font-bold">
+                  {editingUser.displayName.charAt(0)}
+                </div>
+              )}
+              <div>
+                <h3 className="text-xl font-bold text-stone-800 flex items-center gap-2">
+                  <User className="w-5 h-5 text-blue-600" />
+                  Manage Profile: {editingUser.displayName}
+                </h3>
+                <p className="text-stone-500">{editingUser.email}</p>
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* Basic Info */}
@@ -474,6 +527,23 @@ export function AdminDashboard({
                   Basic Information
                 </h4>
                 <div className="space-y-4">
+                  <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-3">
+                      Uploaded Photo
+                    </p>
+                    {editingUser.photoURL ? (
+                      <img
+                        src={editingUser.photoURL}
+                        alt={`${editingUser.displayName} profile`}
+                        className="w-full h-44 object-cover rounded-2xl border border-stone-200"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="w-full h-44 rounded-2xl bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-400 text-sm">
+                        No profile photo uploaded
+                      </div>
+                    )}
+                  </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-stone-500 uppercase">
                       Full Name
@@ -663,9 +733,18 @@ export function AdminDashboard({
                     >
                       <td className="px-8 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center font-bold text-stone-600">
-                            {u.displayName.charAt(0)}
-                          </div>
+                          {u.photoURL ? (
+                            <img
+                              src={u.photoURL}
+                              alt={u.displayName}
+                              className="w-10 h-10 rounded-full object-cover border border-stone-200"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center font-bold text-stone-600">
+                              {u.displayName.charAt(0)}
+                            </div>
+                          )}
                           <div>
                             <p className="font-bold text-stone-900">
                               {u.displayName}

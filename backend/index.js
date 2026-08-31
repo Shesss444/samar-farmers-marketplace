@@ -4,15 +4,23 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'node:crypto';
 import User from './models/User.js';
 import Product from './models/Product.js';
 import Order from './models/Order.js';
+import Review from './models/Review.js';
+import Message from './models/Message.js';
 
 dotenv.config();
 
 const PORT = process.env.PORT || 4000;
 const MONGODB_URI = process.env.MONGODB_URI;
 const JWT_SECRET = process.env.JWT_SECRET || 'replace-me-please';
+const ORDER_STATUS_MAP = { pending: 'preparing', collected: 'ready_to_pick_up', delivered: 'completed' };
+
+function normalizeOrderStatus(status) {
+  return ORDER_STATUS_MAP[status] || status;
+}
 
 if (!MONGODB_URI) {
   console.error('MONGODB_URI not set. Set it in backend/.env');
@@ -58,8 +66,10 @@ mongoose.connect(MONGODB_URI, { autoIndex: true }).then(() => {
 // Sign up route
 app.post('/signup', async (req, res) => {
   try {
-    const { email, password, displayName, role = 'buyer', municipality, phone, primaryProducts } = req.body;
-    if (!email || !password || !displayName) return res.status(400).json({ error: 'Missing required fields' });
+    const { email, password, displayName, role = 'buyer', municipality, phone, photoURL, primaryProducts } = req.body;
+    if (!email || !password || !displayName || !phone) return res.status(400).json({ error: 'Name, email, password, and contact number are required' });
+    if (!['buyer', 'farmer'].includes(role)) return res.status(400).json({ error: 'Invalid account role' });
+    if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
 
     const existing = await User.findOne({ email }).exec();
     if (existing) return res.status(400).json({ error: 'Email already in use' });
@@ -73,7 +83,8 @@ app.post('/signup', async (req, res) => {
       displayName,
       role,
       municipality: municipality || undefined,
-      phone: phone || undefined,
+      phone: phone.trim(),
+      photoURL: photoURL || undefined,
       primaryProducts: Array.isArray(primaryProducts) ? primaryProducts : (primaryProducts ? [primaryProducts] : []),
       // For farmers, leave isApproved undefined (pending). Buyers are approved immediately.
       ...(role === 'buyer' ? { isApproved: true } : {})
@@ -87,6 +98,55 @@ app.post('/signup', async (req, res) => {
   } catch (err) {
     console.error('Signup error:', err);
     return res.status(500).json({ error: String(err) });
+  }
+});
+
+// Request a password reset. In production, deliver resetToken through an email provider.
+app.post('/forgot-password', async (req, res) => {
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const response = { message: 'If an account exists for that email, a reset link has been requested.' };
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+
+    const user = await User.findOne({ email }).exec();
+    if (!user) return res.json(response);
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    user.resetPasswordTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+    user.resetPasswordExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    await user.save();
+
+    if (process.env.NODE_ENV !== 'production') {
+      return res.json({ ...response, resetToken });
+    }
+    return res.json(response);
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    return res.status(500).json({ error: 'Unable to request password reset' });
+  }
+});
+
+app.post('/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body || {};
+    if (!token || !password) return res.status(400).json({ error: 'Reset token and new password are required' });
+    if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+
+    const tokenHash = crypto.createHash('sha256').update(String(token)).digest('hex');
+    const user = await User.findOne({
+      resetPasswordTokenHash: tokenHash,
+      resetPasswordExpiresAt: { $gt: new Date() }
+    }).exec();
+    if (!user) return res.status(400).json({ error: 'Reset token is invalid or expired' });
+
+    user.passwordHash = await bcrypt.hash(password, await bcrypt.genSalt(10));
+    user.resetPasswordTokenHash = undefined;
+    user.resetPasswordExpiresAt = undefined;
+    await user.save();
+    return res.json({ message: 'Password reset successfully' });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    return res.status(500).json({ error: 'Unable to reset password' });
   }
 });
 
@@ -200,7 +260,7 @@ app.post('/signup', async (req, res) => {
           productName: product.name,
           quantity: qty,
           totalPrice: product.price * qty,
-          status: 'pending',
+          status: 'preparing',
           deliveryDate: o.deliveryDate
         });
         await orderDoc.save();
@@ -230,7 +290,7 @@ app.post('/signup', async (req, res) => {
         }
       }
       const docs = await Order.find(q).sort({ createdAt: -1 }).lean().exec();
-      return res.json({ orders: docs.map(d => ({ ...d, id: d._id })) });
+      return res.json({ orders: docs.map(d => ({ ...d, id: d._id, status: normalizeOrderStatus(d.status) })) });
     } catch (e) {
       console.error('List orders error:', e);
       return res.status(500).json({ error: String(e) });
@@ -258,13 +318,15 @@ app.post('/signin', async (req, res) => {
   }
 });
 
-// Update order status (collected/delivered)
+// Update order status
 app.patch('/orders/:id/status', authMiddleware, async (req, res) => {
   try {
     if (!req.auth) return res.status(401).json({ error: 'Unauthorized' });
     const id = req.params.id;
     const { status } = req.body || {};
-    if (!status || !['collected', 'delivered', 'pending'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
+    const statusMap = { pending: 'preparing', collected: 'ready_to_pick_up', delivered: 'completed' };
+    const normalizedStatus = statusMap[status] || status;
+    if (!['preparing', 'ready_to_pick_up', 'completed'].includes(normalizedStatus)) return res.status(400).json({ error: 'Invalid status' });
 
     const order = await Order.findById(id).exec();
     if (!order) return res.status(404).json({ error: 'Order not found' });
@@ -275,12 +337,12 @@ app.patch('/orders/:id/status', authMiddleware, async (req, res) => {
     const isSeller = req.auth.uid === order.sellerId;
 
     // Only the seller (farmer) or admin may change order status to collected/delivered
-    if (status === 'delivered' || status === 'collected') {
+    if (normalizedStatus === 'ready_to_pick_up' || normalizedStatus === 'completed') {
       if (!isSeller && !isAdmin) return res.status(403).json({ error: 'Only seller (farmer) or admin can change status to collected/delivered' });
     }
 
     // Apply update
-    order.status = status;
+    order.status = normalizedStatus;
     await order.save();
     return res.json({ order: order.toJSONSafe() });
   } catch (e) {
@@ -293,13 +355,113 @@ app.patch('/orders/:id/status', authMiddleware, async (req, res) => {
 app.get('/orders/completed', authMiddleware, async (req, res) => {
   try {
     if (!req.auth) return res.status(401).json({ error: 'Unauthorized' });
-    const q = { status: { $in: ['collected', 'delivered'] } };
+    const q = { status: { $in: ['ready_to_pick_up', 'completed', 'collected', 'delivered'] } };
     if (req.auth.role === 'buyer') q.buyerId = req.auth.uid;
     if (req.auth.role === 'farmer') q.sellerId = req.auth.uid;
     const docs = await Order.find(q).sort({ createdAt: -1 }).lean().exec();
-    return res.json({ orders: docs.map(d => ({ ...d, id: d._id })) });
+    return res.json({ orders: docs.map(d => ({ ...d, id: d._id, status: normalizeOrderStatus(d.status) })) });
   } catch (e) {
     console.error('List completed orders error:', e);
+    return res.status(500).json({ error: String(e) });
+  }
+});
+
+// List reviews scoped to the signed-in user's role.
+app.get('/reviews', authMiddleware, async (req, res) => {
+  try {
+    const query = req.auth.role === 'admin'
+      ? {}
+      : req.auth.role === 'farmer'
+        ? { sellerId: req.auth.uid }
+        : { buyerId: req.auth.uid };
+    const reviews = await Review.find(query).sort({ createdAt: -1 }).exec();
+    return res.json({ reviews: reviews.map(review => review.toJSONSafe()) });
+  } catch (e) {
+    console.error('List reviews error:', e);
+    return res.status(500).json({ error: String(e) });
+  }
+});
+
+// Buyers can review an order only after it is completed, once per order.
+app.post('/reviews', authMiddleware, async (req, res) => {
+  try {
+    if (req.auth.role !== 'buyer') return res.status(403).json({ error: 'Only buyers can submit reviews' });
+    const { orderId, rating, comment } = req.body || {};
+    const numericRating = Number(rating);
+    if (!orderId || !Number.isInteger(numericRating) || numericRating < 1 || numericRating > 5 || !String(comment || '').trim()) {
+      return res.status(400).json({ error: 'Order, rating, and review comment are required' });
+    }
+
+    const order = await Order.findOne({ _id: orderId, buyerId: req.auth.uid }).exec();
+    if (!order) return res.status(404).json({ error: 'Completed order not found' });
+    const normalizedStatus = normalizeOrderStatus(order.status);
+    if (normalizedStatus !== 'completed') return res.status(400).json({ error: 'Reviews are available only for completed orders' });
+    if (await Review.exists({ orderId: order._id.toString() })) return res.status(409).json({ error: 'This order has already been reviewed' });
+
+    const buyer = await User.findById(req.auth.uid).exec();
+    const review = await Review.create({
+      orderId: order._id.toString(),
+      buyerId: req.auth.uid,
+      buyerName: buyer?.displayName || order.buyerName || 'Buyer',
+      sellerId: order.sellerId,
+      productId: order.productId,
+      rating: numericRating,
+      comment: String(comment).trim()
+    });
+    return res.status(201).json({ review: review.toJSONSafe() });
+  } catch (e) {
+    console.error('Create review error:', e);
+    if (e.code === 11000) return res.status(409).json({ error: 'This order has already been reviewed' });
+    return res.status(500).json({ error: String(e) });
+  }
+});
+
+// Read messages for a product conversation. Buyers see their conversations; farmers see their inbox.
+app.get('/messages', authMiddleware, async (req, res) => {
+  try {
+    const productId = String(req.query.productId || '');
+    const query = req.auth.role === 'farmer'
+      ? { sellerId: req.auth.uid }
+      : { buyerId: req.auth.uid, ...(productId ? { productId } : {}) };
+    if (productId && req.auth.role === 'farmer') query.productId = productId;
+    const messages = await Message.find(query).sort({ createdAt: 1 }).limit(500).exec();
+    return res.json({ messages: messages.map(message => message.toJSONSafe()) });
+  } catch (e) {
+    console.error('List messages error:', e);
+    return res.status(500).json({ error: String(e) });
+  }
+});
+
+// Send a message between a buyer and the farmer selling the selected product.
+app.post('/messages', authMiddleware, async (req, res) => {
+  try {
+    const { productId, message } = req.body || {};
+    const text = String(message || '').trim();
+    if (!productId || !text) return res.status(400).json({ error: 'Product and message are required' });
+    const product = await Product.findById(productId).exec();
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+    if (!['buyer', 'farmer'].includes(req.auth.role)) return res.status(403).json({ error: 'Only buyers and farmers can chat' });
+    if (req.auth.role === 'farmer' && req.auth.uid !== product.sellerId) return res.status(403).json({ error: 'You do not own this product' });
+    if (req.auth.role === 'farmer' && !req.body.buyerId) return res.status(400).json({ error: 'Buyer is required' });
+
+    const sender = await User.findById(req.auth.uid).exec();
+    const isBuyer = req.auth.role === 'buyer';
+    const buyer = isBuyer ? sender : await User.findById(req.body.buyerId).exec();
+    if (!buyer) return res.status(404).json({ error: 'Buyer not found' });
+    const chatMessage = await Message.create({
+      productId: product._id.toString(),
+      productName: product.name,
+      buyerId: isBuyer ? req.auth.uid : String(req.body.buyerId || ''),
+      buyerName: buyer.displayName || 'Buyer',
+      sellerId: product.sellerId,
+      sellerName: product.sellerName || 'Farmer',
+      senderId: req.auth.uid,
+      senderRole: req.auth.role,
+      message: text
+    });
+    return res.status(201).json({ message: chatMessage.toJSONSafe() });
+  } catch (e) {
+    console.error('Create message error:', e);
     return res.status(500).json({ error: String(e) });
   }
 });
@@ -335,7 +497,7 @@ app.put('/users/:uid', authMiddleware, async (req, res) => {
     const uid = req.params.uid;
     const updates = req.body || {};
 
-    const allowed = ['isApproved', 'role', 'municipality', 'bio', 'farmingPractices', 'phone', 'primaryProducts', 'location', 'displayName'];
+    const allowed = ['isApproved', 'role', 'municipality', 'bio', 'farmingPractices', 'phone', 'photoURL', 'primaryProducts', 'location', 'displayName', 'houseNo', 'street', 'barangay', 'favorites'];
     // Build set/unset payloads. Treat explicit null as request to unset (move back to pending).
     const setPayload = {};
     const unsetPayload = {};
