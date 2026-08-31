@@ -2425,7 +2425,7 @@ export function BuyerInterface({
                           {item.product.name}
                         </h4>
                         <p className="text-xs text-stone-500 mt-1">
-                          ₱{item.product.price} per unit
+                          ₱{item.product.price} per kilogram
                         </p>
                         <div className="flex items-center gap-3 mt-3">
                           <button
