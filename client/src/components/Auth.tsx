@@ -167,7 +167,7 @@ export function Auth({ onAuthSuccess }: AuthProps) {
             <div className="flex items-center gap-4 text-emerald-400">
               <div className="w-12 h-1px bg-emerald-400/30"></div>
               <span className="text-sm uppercase tracking-widest font-semibold">
-                Online Marketplac
+                Online Marketplace
               </span>
             </div>
           </div>
