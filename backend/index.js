@@ -10,6 +10,7 @@ import Product from './models/Product.js';
 import Order from './models/Order.js';
 import Review from './models/Review.js';
 import Message from './models/Message.js';
+import { sendSms } from './sms.js';
 
 dotenv.config();
 
@@ -342,9 +343,19 @@ app.patch('/orders/:id/status', authMiddleware, async (req, res) => {
     }
 
     // Apply update
+    const previousStatus = normalizeOrderStatus(order.status);
     order.status = normalizedStatus;
     await order.save();
-    return res.json({ order: order.toJSONSafe() });
+
+    // Text the buyer when the order becomes ready to pick up (only on the transition, not on repeat saves).
+    let sms;
+    if (normalizedStatus === 'ready_to_pick_up' && previousStatus !== 'ready_to_pick_up') {
+      const buyer = await User.findById(order.buyerId).exec().catch(() => null);
+      const body = `Hi ${buyer?.displayName || order.buyerName || 'there'}, your order of ${order.quantity} kg ${order.productName || 'produce'} `
+        + `from ${order.sellerName || 'your farmer'} is ready to pick up. Total: PHP ${order.totalPrice}. - Samar Farmers Marketplace`;
+      sms = buyer ? await sendSms(buyer.phone, body) : { sent: false, error: 'Buyer not found' };
+    }
+    return res.json({ order: order.toJSONSafe(), ...(sms ? { sms } : {}) });
   } catch (e) {
     console.error('Update order status error:', e);
     return res.status(500).json({ error: String(e) });

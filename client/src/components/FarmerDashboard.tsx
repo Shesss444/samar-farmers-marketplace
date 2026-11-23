@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { UserProfile, Product, Order, Review, Message, CATEGORIES, MUNICIPALITIES } from '../types';
+import { UserProfile, Product, Order, Review, Message, OrderStatusResult, CATEGORIES, MUNICIPALITIES } from '../types';
 import { Plus, Package, ShoppingBag, Calendar, Trash2, Edit2, Loader2, CheckCircle2, Clock, MapPin, Save, Map as MapIcon, User, Mail, Phone, Building, Search, Star, Info, Leaf, TrendingUp, BarChart3, AlertTriangle, Bell, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -29,7 +29,7 @@ interface FarmerDashboardProps {
   onAddProduct: (product: Omit<Product, 'id' | 'createdAt'>) => void;
   onDeleteProduct: (id: string) => void;
   onUpdateProduct: (id: string, updates: Partial<Product>) => void;
-  onUpdateOrderStatus: (id: string, status: Order['status']) => void;
+  onUpdateOrderStatus: (id: string, status: Order['status']) => Promise<OrderStatusResult | null>;
   onUpdateUser: (uid: string, updates: Partial<UserProfile>) => void;
   activeView: string;
 }
@@ -143,12 +143,22 @@ export function FarmerDashboard({ user, products, orders, reviews, onAddProduct,
     });
   };
 
-  const handleUpdateOrderStatus = (id: string, status: Order['status'], productName: string) => {
-    onUpdateOrderStatus(id, status);
-    toast.info(`Order ${status}`, {
-      description: `Order for ${productName} is now ${status}.`,
+  const handleUpdateOrderStatus = async (id: string, status: Order['status'], productName: string) => {
+    const statusLabel = status === 'ready_to_pick_up' ? 'Ready to pick up' : status === 'completed' ? 'Completed' : 'Preparing';
+    toast.info(`Order ${statusLabel}`, {
+      description: `Order for ${productName} is now ${statusLabel.toLowerCase()}.`,
       icon: status === 'completed' ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> : <Clock className="w-5 h-5 text-orange-500" />
     });
+    const result = await onUpdateOrderStatus(id, status);
+    if (!result?.sms) return;
+    if (result.sms.sent) {
+      toast.success('SMS sent to buyer', {
+        description: `The buyer was notified that ${productName} is ready to pick up.`,
+        icon: <MessageSquare className="w-5 h-5 text-emerald-500" />
+      });
+    } else {
+      toast.warning('SMS not sent', { description: result.sms.error || 'The buyer could not be notified by SMS.' });
+    }
   };
 
   const handleUpdateUser = (uid: string, updates: Partial<UserProfile>) => {

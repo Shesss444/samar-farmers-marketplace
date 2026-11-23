@@ -56,6 +56,11 @@ export interface Order {
   createdAt?: string;
 }
 
+export interface OrderStatusResult {
+  order: Order;
+  sms?: { sent: boolean; error?: string; messageId?: string };
+}
+
 export interface Review {
   id: string;
   orderId: string;

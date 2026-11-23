@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from "react";
 import { broadcast, addListener } from "./lib/bc";
-import { UserProfile, Product, Order, Review } from "./types";
+import { UserProfile, Product, Order, Review, OrderStatusResult } from "./types";
 import { Auth } from "./components/Auth";
 import { FarmerDashboard } from "./components/FarmerDashboard";
 import { BuyerInterface } from "./components/BuyerInterface";
@@ -444,10 +444,10 @@ export default function App() {
     if (data.review) setReviews((previous) => [data.review, ...previous.filter((item) => item.id !== data.review.id)]);
   };
 
-  const updateOrderStatus = (orderId: string, status: Order["status"]) => {
+  const updateOrderStatus = (orderId: string, status: Order["status"]): Promise<OrderStatusResult | null> => {
     const API = ((import.meta.env.VITE_API_BASE as string) || "http://localhost:4000").replace(/\/+$/, '');
     const token = localStorage.getItem("idToken");
-    fetch(`${API}/orders/${orderId}/status`, {
+    return fetch(`${API}/orders/${orderId}/status`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -459,7 +459,7 @@ export default function App() {
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           console.error("Failed to update order status", err);
-          return;
+          return null;
         }
         const data = await res.json();
         const updated = data.order || data;
@@ -467,9 +467,11 @@ export default function App() {
           prev.map((o) => (o.id === orderId ? { ...o, ...updated } : o)),
         );
         broadcast('order:updated', updated);
+        return { order: updated, sms: data.sms } as OrderStatusResult;
       })
       .catch((err) => {
         console.error("Update order status error:", err);
+        return null;
       });
   };
 
